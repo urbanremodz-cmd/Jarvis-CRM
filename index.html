@@ -749,6 +749,8 @@ document.querySelectorAll("[data-howto]").forEach(b => b.onclick = () => {
 });
 
 load();
+// a link like http://127.0.0.1:8765/#flowmap opens straight onto that page
+addEventListener("load", () => { const start = document.querySelector(`nav button[data-page="${location.hash.slice(1)}"]`); if (start) start.click(); });
 </script>
 <script src="/flowmap.js"></script>
 </body>
