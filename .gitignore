@@ -5,3 +5,9 @@ remodflow.log
 flowmap.json
 videos/*
 !videos/videos.json
+*.db
+*.sqlite
+.env
+*.env
+secrets*
+.claude/

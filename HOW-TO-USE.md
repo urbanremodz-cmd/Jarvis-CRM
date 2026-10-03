@@ -1,6 +1,6 @@
 # Remod Flow: How to Use
 
-_Updated September 29, 2026. This guide updates itself when you change your boxes._
+_Updated October 03, 2026. This guide updates itself when you change your boxes._
 
 ## ☀️ Every morning (5 minutes)
 
@@ -83,9 +83,28 @@ Your boxes go in this order. Open a customer, do the step, then press the green 
 29. Use **✏️ Rename** to change a video's name or description, and **🗑 Remove** to delete one.
    - 💡 Clear names make the right video easy to find.
 
+## 🧭 Flow Map and page bots
+
+The Flow Map draws your whole app as boxes, built by reading the app's own code. Bots only ask: nothing changes until you press Approve.
+
+30. Click **🧭 Flow Map**. Each box is a page. It shows what the page reads, what it saves, which pages it feeds, its schedules and any outside services. The dot shows how the page is doing right now.
+   - 💡 Green is good, yellow needs you, red means something is wrong, black means the hard stop is on.
+31. Drag a box by its top bar to move it. The lines move around the boxes by themselves.
+   - 💡 Boxes need a little space between them. If you drop one too close, it goes back.
+32. Click a box to see its details and its 🤖 bot. Turn on only the switches you want that bot to have.
+   - 💡 Every bot starts with all switches off. Each switch you flip is saved as a new version.
+33. Press **➕ New flow** and fill in the boxes left to right: **⚡ When…**, **❓ Only if…**, **▶ Then ask to…**. Press **💾 Save as a new version**, then **✅ Approve** it.
+   - 💡 A flow stays off until you approve it. If you edit it, you approve the new version again.
+34. When a flow wants to do something, a request shows at the top of the Flow Map. Press **✅ Approve** to do it or **✖ No** to skip it.
+   - 💡 This is the only way a bot ever changes a customer.
+35. Something looks wrong? Press the red **⛔ HARD STOP**.
+   - 💡 Every bot freezes at once and anything waiting is cancelled. A red Bots stopped tag shows at the top of every page until you turn it off.
+36. Press **📜 Change log** to see every change, newest first. Click **versions** to go back to an earlier version.
+   - 💡 Going back is saved as a new version, so nothing is ever lost.
+
 ## 🎨 Make it yours
 
-30. On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.
+37. On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.
    - 💡 This guide updates itself to match your box names and order.
-31. Not sure what a button does? Point your mouse at it (or tap it) to see a tip.
+38. Not sure what a button does? Point your mouse at it (or tap it) to see a tip.
    - 💡 Every button has one.

@@ -95,6 +95,73 @@
   [data-tip] { position: relative; }
   .tipdot { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #e7e2da; color: #6b6f76; font-size: 12px; font-weight: 700; margin-left: 6px; cursor: help; vertical-align: middle; }
   @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } main { padding: 12px; } header { padding: 10px 12px; } }
+  /* ---- Flow Map */
+  .hs-pill { background: #b42318; color: #fff; border-radius: 10px; padding: 4px 12px; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .fm-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .fm-stop { background: #b42318; color: #fff; border: 0; padding: 11px 22px; border-radius: 10px; font: inherit; font-weight: 800; cursor: pointer; letter-spacing: .3px; box-shadow: 0 0 0 3px #f6c9c4; }
+  .fm-stop:hover { background: #8f1c13; }
+  .fm-stop.on { background: #fff; color: #b42318; border: 2px solid #b42318; box-shadow: none; }
+  .fm-banner { background: #fdecea; border: 2px solid #b42318; color: #8f1c13; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; font-weight: 600; }
+  .fm-reqs { margin-bottom: 12px; }
+  .fm-req { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fff7ec; border: 1px solid #f3dcc0; border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+  .fm-req .what { flex: 1; min-width: 220px; }
+  .fm-wrap { display: flex; gap: 12px; align-items: flex-start; }
+  .fm-scroll { flex: 1; min-width: 0; overflow: auto; height: calc(100vh - 250px); min-height: 460px; background: #fbfaf8;
+    background-image: radial-gradient(#ddd6cc 1px, transparent 1px); background-size: 16px 16px; border: 1px solid var(--line); border-radius: 14px; }
+  #fmCanvas { position: relative; }
+  #fmEdges { position: absolute; left: 0; top: 0; overflow: visible; }
+  #fmEdges path.line { fill: none; stroke: #8a8f98; stroke-width: 2; stroke-linejoin: miter; stroke-linecap: square; }
+  #fmEdges path.line.hot { stroke: var(--brand); stroke-width: 3; }
+  #fmEdges path.hit { fill: none; stroke: transparent; stroke-width: 12; cursor: help; }
+  .fm-box { position: absolute; width: 260px; background: #fff; border: 2px solid var(--line); border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.05); font-size: 13.5px; user-select: none; touch-action: none; }
+  .fm-box.sel { border-color: var(--brand); }
+  .fm-box.bad { border-color: #b42318; border-style: dashed; opacity: .8; }
+  .fm-box.dragging { box-shadow: 0 8px 22px rgba(0,0,0,.18); z-index: 3; }
+  .fm-box.bg { background: #f4f2ee; }
+  .fm-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: grab; font-weight: 700; font-size: 15px; }
+  .fm-head .grip { color: #b3ada4; }
+  .fm-head .name { flex: 1; }
+  .fm-dot { width: 12px; height: 12px; border-radius: 50%; background: #c9c4bc; flex: none; }
+  .fm-dot.ok { background: var(--good); } .fm-dot.attention { background: #e0a106; } .fm-dot.error { background: #b42318; } .fm-dot.stopped { background: #2b2d31; }
+  .fm-live { padding: 6px 10px; color: var(--ink); font-weight: 600; background: var(--soft); }
+  .fm-row { padding: 3px 10px; color: var(--muted); }
+  .fm-row b { color: var(--ink); font-weight: 600; }
+  .fm-chip { display: inline-block; background: #eef1f5; color: #384152; border-radius: 6px; padding: 0 6px; margin: 1px 2px 1px 0; font-size: 12.5px; }
+  .fm-chip.w { background: #fdf0dc; color: #8a5a10; }
+  .fm-bot { margin-top: 4px; padding: 7px 10px; border-top: 1px solid var(--line); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .fm-bot:hover { background: var(--soft); }
+  #fmPanel { width: 380px; flex: none; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; max-height: calc(100vh - 250px); min-height: 460px; overflow: auto; }
+  #fmPanel h3 { margin: 14px 0 6px; font-size: 15px; }
+  #fmPanel ul { margin: 0; padding-left: 18px; } #fmPanel li { margin-bottom: 3px; }
+  .fm-where { color: #9a9ea5; font-size: 12px; }
+  .fm-toggle { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .fm-toggle span.t { flex: 1; }
+  .fm-switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .fm-switch input { opacity: 0; width: 0; height: 0; }
+  .fm-switch i { position: absolute; inset: 0; background: #d4cfc7; border-radius: 12px; transition: .15s; }
+  .fm-switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: .15s; }
+  .fm-switch input:checked + i { background: var(--good); }
+  .fm-switch input:checked + i::after { transform: translateX(18px); }
+  .fm-switch input:focus-visible + i { outline: 3px solid var(--brand); }
+  .fm-flow { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
+  .fm-status { font-size: 12.5px; font-weight: 700; border-radius: 8px; padding: 1px 8px; }
+  .fm-status.on { background: #e3f3e8; color: var(--good); } .fm-status.needs { background: #fdf0dc; color: var(--warn); } .fm-status.paused { background: #eceae6; color: var(--muted); }
+  .fm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 12px; z-index: 6; }
+  .fm-overlay.on { display: flex; }
+  .fm-modal { background: #fff; border-radius: 16px; width: 100%; max-width: 1180px; padding: 20px 22px; }
+  .fm-chain { display: flex; align-items: stretch; overflow-x: auto; padding: 14px 4px 18px; background: #fbfaf8; background-image: radial-gradient(#ddd6cc 1px, transparent 1px); background-size: 16px 16px; border: 1px solid var(--line); border-radius: 12px; margin: 12px 0; }
+  .fm-node { flex: none; width: 230px; background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .fm-node h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .fm-node.trig { border-color: #8db3e8; } .fm-node.cond { border-color: #e8c27a; } .fm-node.act { border-color: #8fcaa4; }
+  .fm-node.add { border-style: dashed; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; width: 150px; background: transparent; }
+  .fm-node.add:hover { border-color: var(--brand); color: var(--brand); }
+  .fm-node select, .fm-node input { padding: 6px 8px; font-size: 14px; }
+  .fm-link { flex: none; width: 34px; position: relative; }
+  .fm-link::before { content: ""; position: absolute; left: 0; right: 6px; top: 50%; border-top: 2px solid #8a8f98; }
+  .fm-link::after { content: ""; position: absolute; right: 0; top: calc(50% - 6px); border: 6px solid transparent; border-left: 7px solid #8a8f98; border-right: 0; }
+  .fm-x { background: none; border: 0; cursor: pointer; color: #9a9ea5; font-size: 16px; }
+  .fm-log td { font-size: 14px; }
+  @media (max-width: 1000px) { .fm-wrap { flex-direction: column; align-items: stretch; } #fmPanel { width: 100%; max-height: none; min-height: 0; } }
 </style>
 </head>
 <body>
@@ -107,7 +174,9 @@
     <button data-page="videos" data-tip="Training videos you can watch anytime to learn how to do things.">🎬 Training Videos</button>
     <button data-page="guide" data-tip="Simple step-by-step: what to do every day to turn leads into signed jobs.">📖 How to Use</button>
     <button data-page="howto" data-tip="Step-by-step help to make Facebook and GoHighLevel do the work for you.">📘 Setup Help</button>
+    <button data-page="flowmap" data-tip="A map of your whole app, drawn from its own code. Set up page bots and your own flows here.">🧭 Flow Map</button>
   </nav>
+  <span class="hs-pill" id="hsPill" hidden data-tip="Hard stop is on, so every bot is frozen. Click to go to the Flow Map and turn it off.">⛔ Bots stopped</span>
 </header>
 
 <main>
@@ -219,7 +288,28 @@ Wants to start: 1-3 months"></textarea>
       <p class="muted">This app doesn't send texts or emails by itself. It writes them so you can copy them. Once GoHighLevel is set up, it sends them for you.</p>
     </div>
   </section>
+
+  <!-- FLOW MAP -->
+  <section class="page" id="page-flowmap">
+    <div class="intro">🧭 <b>Your app, drawn as a map.</b> Each box is a page. Remod Flow builds this map by reading its own code. The dot shows how each page is doing right now.
+      <b>Drag a box by its top bar</b> to move it. <b>Click a box</b> to see everything about it and set up its 🤖 bot. Bots only ask: <b>nothing changes until you press Approve.</b></div>
+    <div class="fm-banner" id="fmStopBanner" hidden></div>
+    <div class="fm-bar">
+      <button class="fm-stop" id="fmStop" data-tip="Freezes every bot right away. Bots stop noticing, stop asking, and anything waiting for approval is cancelled.">⛔ HARD STOP</button>
+      <button class="btn ghost small" id="fmNewFlow" data-tip="Draw your own flow: when something happens, check something, then do something.">➕ New flow</button>
+      <button class="btn ghost small" id="fmLogBtn" data-tip="Every change ever made here, newest first. You can go back to any earlier version.">📜 Change log</button>
+      <button class="btn ghost small" id="fmArrange" data-tip="Puts the boxes back in neat rows.">↺ Tidy boxes</button>
+      <button class="btn ghost small" id="fmScan" data-tip="Reads the app's code again. Do this after the app is changed.">🔄 Re-scan code</button>
+      <span class="muted" id="fmScanInfo" style="font-size:13px"></span>
+    </div>
+    <div class="fm-reqs" id="fmRequests"></div>
+    <div class="fm-wrap">
+      <div class="fm-scroll" id="fmScroll"><div id="fmCanvas"><svg id="fmEdges" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
+      <aside id="fmPanel"></aside>
+    </div>
+  </section>
 </main>
+<div class="fm-overlay" id="fmOverlay"><div class="fm-modal" id="fmModal"></div></div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
@@ -649,6 +739,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.id === "page-" + b.dataset.page));
   if (b.dataset.page === "guide") renderGuide();
   if (b.dataset.page === "videos") renderVideos();
+  if (b.dataset.page === "flowmap") renderFlowMap();
   if (b.dataset.page !== "videos") document.querySelectorAll("video").forEach(v => v.pause());
 });
 document.querySelectorAll("[data-howto]").forEach(b => b.onclick = () => {
@@ -658,6 +749,9 @@ document.querySelectorAll("[data-howto]").forEach(b => b.onclick = () => {
 });
 
 load();
+// a link like http://127.0.0.1:8765/#flowmap opens straight onto that page
+addEventListener("load", () => { const start = document.querySelector(`nav button[data-page="${location.hash.slice(1)}"]`); if (start) start.click(); });
 </script>
+<script src="/flowmap.js"></script>
 </body>
 </html>

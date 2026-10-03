@@ -115,6 +115,28 @@ def build(layout):
             ],
         },
         {
+            "title": "🧭 Flow Map and page bots",
+            "intro": "The Flow Map draws your whole app as boxes, built by reading the app's own code. Bots only ask: nothing changes until you press Approve.",
+            "steps": [
+                ("Click **🧭 Flow Map**. Each box is a page. It shows what the page reads, what it saves, which pages it feeds, "
+                 "its schedules and any outside services. The dot shows how the page is doing right now.",
+                 "Green is good, yellow needs you, red means something is wrong, black means the hard stop is on."),
+                ("Drag a box by its top bar to move it. The lines move around the boxes by themselves.",
+                 "Boxes need a little space between them. If you drop one too close, it goes back."),
+                ("Click a box to see its details and its 🤖 bot. Turn on only the switches you want that bot to have.",
+                 "Every bot starts with all switches off. Each switch you flip is saved as a new version."),
+                ("Press **➕ New flow** and fill in the boxes left to right: **⚡ When…**, **❓ Only if…**, **▶ Then ask to…**. "
+                 "Press **💾 Save as a new version**, then **✅ Approve** it.",
+                 "A flow stays off until you approve it. If you edit it, you approve the new version again."),
+                ("When a flow wants to do something, a request shows at the top of the Flow Map. Press **✅ Approve** to do it or **✖ No** to skip it.",
+                 "This is the only way a bot ever changes a customer."),
+                ("Something looks wrong? Press the red **⛔ HARD STOP**.",
+                 "Every bot freezes at once and anything waiting is cancelled. A red Bots stopped tag shows at the top of every page until you turn it off."),
+                ("Press **📜 Change log** to see every change, newest first. Click **versions** to go back to an earlier version.",
+                 "Going back is saved as a new version, so nothing is ever lost."),
+            ],
+        },
+        {
             "title": "🎨 Make it yours",
             "steps": [
                 ("On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.",
