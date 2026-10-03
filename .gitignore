@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+remodflow.db
+remodflow.log
+flowmap.json
+videos/*
+!videos/videos.json
