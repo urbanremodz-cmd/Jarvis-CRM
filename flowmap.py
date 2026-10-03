@@ -25,13 +25,19 @@ RES_LABEL = {
     "file:videos": "Video files",
     "file:videos/videos.json": "Video names",
     "file:index.html": "App screen file",
+    "table:hub_records": "Master records",
+    "table:hub_record_versions": "Master record versions",
+    "table:hub_links": "CRM links (who is who)",
+    "table:hub_outbox": "Changes waiting to be written",
+    "table:hub_conflicts": "CRM disagreements",
+    "table:hub_secrets": "CRM keys (this computer only)",
 }
 SCHEDULE_LABEL = {
     "protocol_b_due": "Check-in text comes due",
     "protocol_b_ready": "Check-in text comes due",
     "nurture": "Monthly emails come due",
 }
-FUNC_LABEL = {"start_watcher": "Bot watcher checks time-based flows"}
+FUNC_LABEL = {"start_watcher": "Bot watcher checks time-based flows", "start_auto_pull": "Sync Hub reads your CRMs"}
 # Python calls that reach outside the app.
 PY_OUTSIDE = {
     "os.startfile": ("Windows (opens a folder)", "computer"),
@@ -153,8 +159,38 @@ def _duration(call):
     return ", ".join(parts) or "a set time"
 
 
+def _const_numbers(tree):
+    """Module number constants like AUTO_PULL_MINUTES = 5."""
+    return {n.targets[0].id: n.value.value for n in tree.body
+            if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+            and isinstance(n.value, ast.Constant) and isinstance(n.value.value, (int, float))}
+
+
+def _number(node, numbers):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.Name):
+        return numbers.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+        a, b = _number(node.left, numbers), _number(node.right, numbers)
+        return a * b if a is not None and b is not None else None
+    return None
+
+
+def _class_label(cls):
+    """A connector class names its service:  id, label = "ghl", "GoHighLevel"."""
+    for st in cls.body:
+        if isinstance(st, ast.Assign) and isinstance(st.value, (ast.Tuple, ast.Constant)):
+            names = st.targets[0].elts if isinstance(st.targets[0], ast.Tuple) else [st.targets[0]]
+            vals = st.value.elts if isinstance(st.value, ast.Tuple) else [st.value]
+            for n, v in zip(names, vals):
+                if isinstance(n, ast.Name) and n.id == "label" and isinstance(v, ast.Constant) and v.value:
+                    return v.value
+    return None
+
+
 def scan_python(paths):
-    funcs, modules = {}, {}
+    funcs, modules, methods = {}, {}, {}
     for path in paths:
         module = os.path.splitext(os.path.basename(path))[0]
         with open(path, encoding="utf-8-sig") as f:
@@ -162,15 +198,18 @@ def scan_python(paths):
         tree = ast.parse(src)
         modules[module] = tree
         consts = _const_paths(tree)
+        numbers = _const_numbers(tree)
         defs = []
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                defs.append((node.name, node))
+                defs.append((node.name, node, None))
             elif isinstance(node, ast.ClassDef):
+                label = _class_label(node)
                 for sub in node.body:
                     if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        defs.append((sub.name, sub))
-        for name, node in defs:
+                        defs.append((sub.name, sub, label))
+                        methods.setdefault(module, set()).add(sub.name)
+        for name, node, cls_label in defs:
             fn = PyFunc(module, name, node, src)
             for text in _strings(node):
                 r, w = _sql_resources(text)
@@ -193,12 +232,14 @@ def scan_python(paths):
                             fn.reads.add(res)
                     elif callee in PY_OUTSIDE:
                         name_, kind = PY_OUTSIDE[callee]
+                        if cls_label and kind == "internet":
+                            name_ = f"{cls_label} (over the internet)"
                         fn.outside.append({"name": name_, "kind": kind, "where": fn.where(n)})
                     elif callee.split(".")[-1] == "timedelta":
                         fn.schedules.append({"call": n, "where": fn.where(n), "when": _duration(n)})
                     elif callee in ("time.sleep",) or callee.endswith(".wait"):
-                        if n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, (int, float)):
-                            secs = n.args[0].value
+                        secs = _number(n.args[0], numbers) if n.args else None
+                        if secs is not None:
                             if secs >= 30 and any(isinstance(p, ast.While) for p in ast.walk(node)):
                                 fn.schedules.append({"call": n, "where": fn.where(n), "when": f"every {secs:g} seconds",
                                                      "label": FUNC_LABEL.get(name, "Runs " + name.replace("_", " ")),
@@ -218,6 +259,10 @@ def scan_python(paths):
             for cand in (f"{fn.module}.{c}", c):
                 if cand in funcs:
                     resolved.add(cand)
+            # obj.method() where obj is one of this module's classes (like a connector): follow the method
+            meth = c.rsplit(".", 1)[-1]
+            if "." in c and c.split(".")[0] not in modules and meth in methods.get(fn.module, ()):
+                resolved.add(f"{fn.module}.{meth}")
         resolved.discard(fn.key)
         fn.calls = resolved
     return funcs, modules

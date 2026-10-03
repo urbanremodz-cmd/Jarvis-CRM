@@ -102,9 +102,26 @@ The Flow Map draws your whole app as boxes, built by reading the app's own code.
 36. Press **📜 Change log** to see every change, newest first. Click **versions** to go back to an earlier version.
    - 💡 Going back is saved as a new version, so nothing is ever lost.
 
+## 🔗 Sync Hub: one master copy across your CRMs
+
+The Sync Hub keeps one master copy of every customer and keeps your CRMs in step. Nothing is written into a CRM until you press Approve.
+
+37. Click **🔗 Sync Hub**. Under **Your CRMs**, switch on **Sync this CRM** for Remod Flow and for GoHighLevel.
+   - 💡 Syncing only reads. It never changes anything in your CRMs by itself.
+38. For GoHighLevel, open **🔑 Connection** and paste your private integration token and location ID. Add your pipeline ID too if you want stages and job worth to sync. Press **Save**.
+   - 💡 Name your GoHighLevel stages the same as your Remod Flow boxes so they match up. Keys stay on this computer.
+39. Press **🔄 Sync everything now**. The same person in two CRMs is matched by email or phone, so you get one master record.
+   - 💡 After that, switched-on CRMs are read again every few minutes while the app is open.
+40. When a CRM is missing something, it shows under **Waiting for your approval**. Turn on **Write approved changes into it** for that CRM, then press **✅ Approve** (or **✅ Approve all**).
+   - 💡 Say **✖ No** and you won't be asked about that exact change again.
+41. If two CRMs disagree, it shows under **⚖ Two CRMs disagree**. Click the value that's right.
+   - 💡 Under **When two CRMs disagree** you can make a CRM the boss for a field, or have Jarvis ask you every time.
+42. The **⛔ HARD STOP** on the Flow Map freezes syncing too, and cancels every change waiting to be written.
+   - 💡 Every sync, approval and change is in the **📜 Change log**. Click a master record to see all its versions.
+
 ## 🎨 Make it yours
 
-37. On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.
+43. On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.
    - 💡 This guide updates itself to match your box names and order.
-38. Not sure what a button does? Point your mouse at it (or tap it) to see a tip.
+44. Not sure what a button does? Point your mouse at it (or tap it) to see a tip.
    - 💡 Every button has one.

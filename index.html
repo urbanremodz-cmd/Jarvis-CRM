@@ -101,6 +101,10 @@
   .fm-stop { background: #b42318; color: #fff; border: 0; padding: 11px 22px; border-radius: 10px; font: inherit; font-weight: 800; cursor: pointer; letter-spacing: .3px; box-shadow: 0 0 0 3px #f6c9c4; }
   .fm-stop:hover { background: #8f1c13; }
   .fm-stop.on { background: #fff; color: #b42318; border: 2px solid #b42318; box-shadow: none; }
+  .hub-sys h3 { margin: 0 0 2px; font-size: 18px; } .hub-sys .vbody { padding: 14px 16px; }
+  .hub-key { display: flex; gap: 6px; align-items: center; margin: 6px 0; } .hub-key label { flex: 1; font-size: 13.5px; color: var(--muted); font-weight: 600; }
+  .hub-val { display: inline-block; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 1px 8px; margin: 2px 2px 2px 0; font-size: 14px; }
+  .hub-tag { display: inline-block; background: #e8eef9; color: var(--blue); border-radius: 8px; padding: 0 7px; font-size: 12.5px; font-weight: 600; margin: 1px 2px; }
   .fm-banner { background: #fdecea; border: 2px solid #b42318; color: #8f1c13; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; font-weight: 600; }
   .fm-reqs { margin-bottom: 12px; }
   .fm-req { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fff7ec; border: 1px solid #f3dcc0; border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
@@ -174,6 +178,7 @@
     <button data-page="videos" data-tip="Training videos you can watch anytime to learn how to do things.">🎬 Training Videos</button>
     <button data-page="guide" data-tip="Simple step-by-step: what to do every day to turn leads into signed jobs.">📖 How to Use</button>
     <button data-page="howto" data-tip="Step-by-step help to make Facebook and GoHighLevel do the work for you.">📘 Setup Help</button>
+    <button data-page="hub" data-tip="Keeps one master copy of every customer in step across all your CRMs. Nothing is written into a CRM until you approve it.">🔗 Sync Hub <span class="badge" id="hubBadge" hidden>0</span></button>
     <button data-page="flowmap" data-tip="A map of your whole app, drawn from its own code. Set up page bots and your own flows here.">🧭 Flow Map</button>
   </nav>
   <span class="hs-pill" id="hsPill" hidden data-tip="Hard stop is on, so every bot is frozen. Click to go to the Flow Map and turn it off.">⛔ Bots stopped</span>
@@ -307,6 +312,29 @@ Wants to start: 1-3 months"></textarea>
       <div class="fm-scroll" id="fmScroll"><div id="fmCanvas"><svg id="fmEdges" xmlns="http://www.w3.org/2000/svg"></svg></div></div>
       <aside id="fmPanel"></aside>
     </div>
+  </section>
+
+  <!-- SYNC HUB -->
+  <section class="page" id="page-hub">
+    <div class="intro">🔗 <b>One master copy of every customer, kept in step across your CRMs.</b> Jarvis reads each CRM you switch on,
+      matches the same person by email or phone, and keeps the master copy up to date. When a CRM is missing something, it shows up below.
+      <b>Nothing is written into any CRM until you press Approve.</b> The ⛔ hard stop on the Flow Map freezes syncing too.</div>
+    <div class="fm-banner" id="hubStopBanner" hidden>⛔ <b>Hard stop is ON.</b> Syncing is frozen: nothing is read or written, and nothing can be approved until you turn it off on the 🧭 Flow Map.</div>
+    <div class="summary" id="hubSummary"></div>
+    <div class="fm-bar">
+      <button class="btn small" id="hubSyncAll" data-tip="Reads every CRM that's switched on right now. Reading never changes anything in your CRMs.">🔄 Sync everything now</button>
+      <button class="btn ghost small" id="hubLogBtn" data-tip="Every change, approval and sync, newest first.">📜 Change log</button>
+      <span class="muted" id="hubAuto" style="font-size:13px"></span>
+    </div>
+    <div id="hubConflicts"></div>
+    <div id="hubOutbox"></div>
+    <h2 class="section-title">Your CRMs</h2>
+    <div class="vgrid" id="hubSystems"></div>
+    <h2 class="section-title">Master records</h2>
+    <div class="box" style="padding:8px 12px;overflow-x:auto"><table id="hubRecords"></table></div>
+    <details class="box"><summary><b>⚖ When two CRMs disagree</b> <span class="muted">(who wins, field by field)</span></summary>
+      <p class="muted" style="font-size:14px">If the same field was changed in two CRMs since they last synced, this decides what the master copy keeps.</p>
+      <table id="hubRules"></table></details>
   </section>
 </main>
 <div class="fm-overlay" id="fmOverlay"><div class="fm-modal" id="fmModal"></div></div>
@@ -740,6 +768,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.page === "guide") renderGuide();
   if (b.dataset.page === "videos") renderVideos();
   if (b.dataset.page === "flowmap") renderFlowMap();
+  if (b.dataset.page === "hub") renderHub();
   if (b.dataset.page !== "videos") document.querySelectorAll("video").forEach(v => v.pause());
 });
 document.querySelectorAll("[data-howto]").forEach(b => b.onclick = () => {
@@ -753,5 +782,6 @@ load();
 addEventListener("load", () => { const start = document.querySelector(`nav button[data-page="${location.hash.slice(1)}"]`); if (start) start.click(); });
 </script>
 <script src="/flowmap.js"></script>
+<script src="/hub.js"></script>
 </body>
 </html>
