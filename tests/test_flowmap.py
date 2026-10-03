@@ -132,16 +132,16 @@ class BotSafetyTest(unittest.TestCase):
         self.assertTrue(bots.perms("pipeline")["watch:table:leads"])
         self.assertGreaterEqual(len(bots.read_log()), 3)
 
-    def test_going_back_to_hard_stop_on_still_cancels_requests(self):
+    def test_going_back_cannot_switch_bots_on(self):
         bots.set_hard_stop(True)
         bots.set_hard_stop(False)
-        self.make_flow()
-        app.add_lead(LEAD)
-        self.assertEqual(len(self.pending()), 1)
-        on_version = next(h["version"] for h in bots.history("hardstop", "all") if h["value"]["on"])
-        bots.restore("hardstop", "all", on_version)
+        bots.set_hard_stop(True)
+        self.assertIn("error", bots.restore("hardstop", "all", 2))
         self.assertTrue(bots.hard_stopped())
-        self.assertEqual(self.pending(), [])
+        f = self.make_flow()
+        bots.set_flow_state(f["id"], "pause")
+        self.assertIn("error", bots.restore("flow_state", f["id"], 2))
+        self.assertEqual(bots.flow(f["id"])["status"], "paused")
 
     def test_approve_refuses_a_version_you_did_not_see(self):
         f = self.make_flow(approve=False)

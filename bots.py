@@ -110,14 +110,15 @@ def history(kind, key):
 
 
 def restore(kind, key, version):
-    """Going back is itself a new version, so nothing in the history is ever lost."""
+    """Going back is itself a new version, so nothing in the history is ever lost.
+    Only switches, flows and box positions can go back. The hard stop and a flow's on/off state can't, so going
+    back can never quietly turn a bot on."""
+    if kind not in ("perms", "flow", "layout"):
+        return {"error": "That can't be put back to an older version."}
     old = next((h for h in history(kind, key) if h["version"] == int(version)), None)
     if not old:
         return {"error": "That version wasn't found."}
     value = old["value"]
-    if kind == "hardstop":  # same path as the button, so turning it on still cancels waiting requests
-        set_hard_stop(bool((value or {}).get("on")))
-        return {"ok": True}
     if kind == "flow":
         _save_flow_def(key, value, f"Went back to version {version}")
         return {"ok": True}

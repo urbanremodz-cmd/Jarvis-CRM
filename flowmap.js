@@ -65,7 +65,17 @@ function drawBoxes() {
   for (const p of FM.map.scan.pages) if (!fits(p.id, FM.pos[p.id])) FM.pos[p.id] = freeSpot(p.id, FM.pos[p.id]);
   placeAll();
   route();
-  applyStatus();
+  applyStatus();  // fills in live text, then re-measures and re-routes if any box changed size
+}
+
+function remeasure() {
+  let changed = false;
+  document.querySelectorAll("#fmCanvas .fm-box").forEach(el => {
+    const id = el.dataset.id, s = FM.size[id], w = el.offsetWidth, h = el.offsetHeight;
+    if (w && (!s || s.w !== w || s.h !== h)) { FM.size[id] = {w, h}; changed = true; }
+  });
+  if (changed) for (const p of FM.map.scan.pages) if (FM.pos[p.id] && !fits(p.id, FM.pos[p.id])) FM.pos[p.id] = freeSpot(p.id, FM.pos[p.id]);
+  return changed;
 }
 
 function placeAll() {
@@ -286,6 +296,8 @@ function applyStatus() {
     const bl = el.querySelector("[data-bot]"), html = bl && botLine(el.dataset.id);
     if (bl && bl.dataset.html !== html) { bl.innerHTML = html; bl.dataset.html = html; }
   });
+  // live text can make a box taller or shorter: measure again so lines keep going around the real box
+  if (remeasure()) { placeAll(); route(); }
   showStopState(!!st.hard_stop);
   if (!st.offline && st.pending !== FM.lastPending) { FM.lastPending = st.pending; if (FM.lastPending !== undefined) reloadRuns(); }
   const sc = FM.map.scan;

@@ -15,7 +15,7 @@ import videos
 from urllib.parse import unquote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "remodflow.db")
+DB_PATH = os.environ.get("REMODFLOW_DB") or os.path.join(HERE, "remodflow.db")
 PORT = int(os.environ.get("REMODFLOW_PORT") or 8765)
 
 STAGES = [
@@ -602,6 +602,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")  # always show the newest screen after an update
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -618,6 +619,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
