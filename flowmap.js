@@ -397,7 +397,7 @@ function flowList(list) {
       <div style="font-size:13.5px;margin:4px 0">${esc(flowSentence(f))}</div>
       ${missing.length ? `<div style="font-size:13px;color:#b42318">⚠ Its bot needs: ${missing.map(m => esc(permLabel(f.bot, m))).join(", ")}</div>` : ""}
       <div class="row" style="gap:6px;margin-top:4px">
-        ${f.status === "needs approval" ? `<button class="btn small green" onclick="flowState('${f.id}','approve')" data-tip="Turns on this exact version. If you edit it later, you'll be asked again.">✅ Approve v${f.version}</button>` : ""}
+        ${f.status === "needs approval" ? `<button class="btn small green" onclick="flowState('${f.id}','approve',${f.version})" data-tip="Turns on this exact version. If you edit it later, you'll be asked again.">✅ Approve v${f.version}</button>` : ""}
         ${f.status === "on" ? `<button class="btn small ghost" onclick="flowState('${f.id}','pause')" data-tip="Stops this flow from asking for anything.">⏸ Pause</button>` : ""}
         ${f.status === "paused" ? `<button class="btn small ghost" onclick="flowState('${f.id}','resume')">▶ Turn on</button>` : ""}
         <button class="btn small ghost" onclick="openFlowEditor('${f.id}')">✏️ Edit</button>
@@ -420,9 +420,9 @@ function flowSentence(f) {
   return `When: ${when}${ifs ? ` · Only if: ${ifs}` : ""} · Then ask to: ${thens}`;
 }
 
-async function flowState(id, what) {
+async function flowState(id, what, version) {
   if (what === "delete" && !confirm("Remove this flow? Its history stays in the change log.")) return;
-  try { await api("/api/flowmap/flow/state", {id, what}); toast({approve: "✅ Flow approved", pause: "⏸ Flow paused", resume: "▶ Flow on", delete: "🗑 Flow removed"}[what]); }
+  try { await api("/api/flowmap/flow/state", {id, what, version}); toast({approve: "✅ Flow approved", pause: "⏸ Flow paused", resume: "▶ Flow on", delete: "🗑 Flow removed"}[what]); }
   catch (e) { toast(e.message); }
   renderFlowMap();
 }

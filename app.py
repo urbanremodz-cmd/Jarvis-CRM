@@ -488,10 +488,16 @@ def resource_ok(res):
             with db() as conn:
                 conn.execute(f"SELECT COUNT(*) FROM {name}")  # name comes from the code scan, not from a person
         elif kind == "file":
-            return os.path.exists(os.path.join(HERE, name)) or name == "HOW-TO-USE.md"
+            # a file that doesn't exist yet is fine: the app makes it the first time it's needed
+            fpath = os.path.join(HERE, name)
+            return not os.path.exists(fpath) or os.access(fpath, os.R_OK)
         return True
     except sqlite3.Error:
         return False
+
+
+def plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
 
 def flow_status():
@@ -506,7 +512,7 @@ def flow_status():
     vids = videos.list_videos()["videos"]
     guide_time = os.path.getmtime(guide.MD_PATH) if os.path.exists(guide.MD_PATH) else None
     live = {
-        "pipeline": (f"{sum(1 for l in leads if l['stage'] not in ('Nurture/Follow-Up', 'Closed-Won'))} customers in progress"
+        "pipeline": (plural(sum(1 for l in leads if l['stage'] not in ('Nurture/Follow-Up', 'Closed-Won')), "customer") + " in progress"
                      + (f" · {text_now} to text now" if text_now else ""), "attention" if text_now else "ok"),
         "add": (f"{sum(1 for l in leads if (l['created_at'] or '').startswith(today_s))} added today", "ok"),
         "follow": (f"{due} to send today" if due else "Nothing due", "attention" if due else "ok"),
@@ -561,7 +567,7 @@ def flow_post(path, data):
             return {"error": "Pick which page's bot runs this flow."}
         return bots.save_flow(data)
     if path == "/api/flowmap/flow/state":
-        return bots.set_flow_state(str(data.get("id")), data.get("what"))
+        return bots.set_flow_state(str(data.get("id")), data.get("what"), data.get("version"))
     if path == "/api/flowmap/run":
         return bots.decide(int(data.get("id") or 0), bool(data.get("approve")), run_bot_action)
     if path == "/api/flowmap/hardstop":
@@ -682,8 +688,15 @@ class Handler(BaseHTTPRequestHandler):
                         unquote(self.headers.get("X-Description", "")), added=now_iso())
         return self.send_json({"ok": True, "file": name})
 
+    def same_site(self):
+        """Blocks other websites open in your browser from sending changes (like an approval) to this app."""
+        origin = self.headers.get("Origin")
+        return not origin or origin in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}")
+
     def do_POST(self):
         path = urlparse(self.path).path
+        if not self.same_site():
+            return self.send_json({"error": "Changes can only come from this app's own page."}, 403)
         if path == "/api/videos/upload":
             return self.receive_video()
         data = self.read_json()

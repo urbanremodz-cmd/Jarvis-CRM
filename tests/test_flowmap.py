@@ -132,6 +132,23 @@ class BotSafetyTest(unittest.TestCase):
         self.assertTrue(bots.perms("pipeline")["watch:table:leads"])
         self.assertGreaterEqual(len(bots.read_log()), 3)
 
+    def test_going_back_to_hard_stop_on_still_cancels_requests(self):
+        bots.set_hard_stop(True)
+        bots.set_hard_stop(False)
+        self.make_flow()
+        app.add_lead(LEAD)
+        self.assertEqual(len(self.pending()), 1)
+        on_version = next(h["version"] for h in bots.history("hardstop", "all") if h["value"]["on"])
+        bots.restore("hardstop", "all", on_version)
+        self.assertTrue(bots.hard_stopped())
+        self.assertEqual(self.pending(), [])
+
+    def test_approve_refuses_a_version_you_did_not_see(self):
+        f = self.make_flow(approve=False)
+        bots.save_flow({**f, "name": "Changed"})
+        self.assertIn("error", bots.set_flow_state(f["id"], "approve", f["version"]))
+        self.assertEqual(bots.flow(f["id"])["status"], "needs approval")
+
     def test_time_based_trigger(self):
         f = bots.save_flow({"name": "Daily note", "bot": "pipeline", "trigger": {"type": "daily", "time": "00:00"},
                             "conditions": [], "actions": [{"type": "note", "text": "check in"}]})

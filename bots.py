@@ -115,6 +115,9 @@ def restore(kind, key, version):
     if not old:
         return {"error": "That version wasn't found."}
     value = old["value"]
+    if kind == "hardstop":  # same path as the button, so turning it on still cancels waiting requests
+        set_hard_stop(bool((value or {}).get("on")))
+        return {"ok": True}
     if kind == "flow":
         _save_flow_def(key, value, f"Went back to version {version}")
         return {"ok": True}
@@ -241,12 +244,14 @@ def save_flow(data):
     return _save_flow_def(fid, value, "saved" if data.get("id") else "created")
 
 
-def set_flow_state(fid, what):
+def set_flow_state(fid, what, version=None):
     f = flow(fid)
     if not f:
         return {"error": "That flow wasn't found."}
     st = dict(get("flow_state", fid, {}) or {})
     if what == "approve":
+        if version is not None and int(version) != f["version"]:
+            return {"error": f"This flow was changed to version {f['version']} since you looked. Check it, then approve again."}
         st.update(approved_version=f["version"], paused=False)
         msg = f"✅ Approved flow \"{f['name']}\" version {f['version']}"
     elif what == "pause":
@@ -326,19 +331,20 @@ def _describe(f, lead):
 
 def _propose(f, lead, why, dedupe):
     """A bot asks. Nothing happens until you approve."""
-    if hard_stopped():
-        return
-    if missing_perms(f):
-        log("blocked", f"flow:{f['id']}", f"Flow \"{f['name']}\" wanted to ask about {lead.get('name')}, "
-            f"but its bot isn't allowed: {', '.join(missing_perms(f))}", who="bot")
-        return
-    with SETUP["lock"], _db() as conn:
-        cur = conn.execute(
-            """INSERT OR IGNORE INTO flow_runs (ts, flow_id, flow_version, bot, lead_id, lead_name, reason, actions,
-               dedupe, status) VALUES (?,?,?,?,?,?,?,?,?, 'pending')""",
-            (now_iso(), f["id"], f["version"], f["bot"], lead["id"], lead.get("name"), why,
-             json.dumps(f["actions"]), dedupe))
-        made = cur.rowcount
+    with _lock:  # held so the hard stop can't switch on between the check and the request being saved
+        if hard_stopped():
+            return
+        if missing_perms(f):
+            log("blocked", f"flow:{f['id']}", f"Flow \"{f['name']}\" wanted to ask about {lead.get('name')}, "
+                f"but its bot isn't allowed: {', '.join(missing_perms(f))}", who="bot")
+            return
+        with SETUP["lock"], _db() as conn:
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO flow_runs (ts, flow_id, flow_version, bot, lead_id, lead_name, reason, actions,
+                   dedupe, status) VALUES (?,?,?,?,?,?,?,?,?, 'pending')""",
+                (now_iso(), f["id"], f["version"], f["bot"], lead["id"], lead.get("name"), why,
+                 json.dumps(f["actions"]), dedupe))
+            made = cur.rowcount
     if made:
         log("request", f"flow:{f['id']}", f"🤖 \"{f['name']}\" asks to {_describe(f, lead)}. Waiting for you.", who="bot")
 
