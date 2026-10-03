@@ -6,15 +6,17 @@ import sqlite3
 import threading
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
+import bots
+import flowmap
 import guide
 import videos
 from urllib.parse import unquote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(HERE, "remodflow.db")
-PORT = 8765
+PORT = int(os.environ.get("REMODFLOW_PORT") or 8765)
 
 STAGES = [
     "New Lead",
@@ -396,18 +398,22 @@ def add_lead(raw):
              lead["stage"], lead["reason"], "", raw, ts, ts,
              ts if lead["stage"] == "Nurture/Follow-Up" else None),
         )
-        return get_lead(conn, cur.lastrowid)
+        new = get_lead(conn, cur.lastrowid)
+    bots.event("lead_added", new)
+    return new
 
 
 EDITABLE = ["name", "phone", "email", "location", "project", "homeowner", "budget", "job_value", "timeline", "notes"]
 
 
-def update_lead(lid, data):
+def update_lead(lid, data, origin="you"):
     with db_lock, db() as conn:
         cur = get_lead(conn, lid)
         if not cur:
             return None
         sets, vals = [], []
+        if data.get("append_note"):
+            data["notes"] = ((cur["notes"] or "") + "\n" + data["append_note"]).strip()
         for k in EDITABLE:
             if k in data:
                 v = data[k]
@@ -445,12 +451,124 @@ def update_lead(lid, data):
             vals.append(",".join(sorted(sent)))
         if sets:
             conn.execute(f"UPDATE leads SET {', '.join(sets)} WHERE id=?", (*vals, lid))
-        return get_lead(conn, lid)
+        new = get_lead(conn, lid)
+    if new["stage"] != cur["stage"]:
+        bots.event("stage_changed", new, origin)
+    return new
+
+
+def run_bot_action(action, lid):
+    """Makes one change a bot asked for. Only called after you press Approve (see bots.decide)."""
+    if action["type"] == "move":
+        if action["stage"] not in STAGES:
+            raise ValueError(f"there is no box called {action['stage']}")
+        data = {"stage": action["stage"]}
+    elif action["type"] == "note":
+        data = {"append_note": f"🤖 {action['text']}"}
+    else:
+        raise ValueError("unknown action")
+    if not update_lead(lid, data, origin="bot"):
+        raise ValueError("that customer was deleted")
 
 
 def delete_lead(lid):
     with db_lock, db() as conn:
         conn.execute("DELETE FROM leads WHERE id=?", (lid,))
+
+
+# ---------------------------------------------------------------- flow map
+
+STARTED = now_iso()
+
+
+def resource_ok(res):
+    kind, name = res.split(":", 1)
+    try:
+        if kind == "table":
+            with db() as conn:
+                conn.execute(f"SELECT COUNT(*) FROM {name}")  # name comes from the code scan, not from a person
+        elif kind == "file":
+            return os.path.exists(os.path.join(HERE, name)) or name == "HOW-TO-USE.md"
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def flow_status():
+    """Live status for every box on the Flow Map."""
+    scan = flowmap.current_map()
+    leads = all_leads()
+    today_s = datetime.now().date().isoformat()
+    due = sum(1 for l in leads if l["protocol_b_ready"]) + sum(
+        1 for l in leads if l["stage"] == "Nurture/Follow-Up" for n in l["nurture"] if not n["sent"] and n["due"] <= today_s)
+    text_now = sum(1 for l in leads if l["stage"] == "Pre-Qualified" and not l["protocol_a_sent_at"])
+    pending = len(bots.runs("pending"))
+    vids = videos.list_videos()["videos"]
+    guide_time = os.path.getmtime(guide.MD_PATH) if os.path.exists(guide.MD_PATH) else None
+    live = {
+        "pipeline": (f"{sum(1 for l in leads if l['stage'] not in ('Nurture/Follow-Up', 'Closed-Won'))} customers in progress"
+                     + (f" · {text_now} to text now" if text_now else ""), "attention" if text_now else "ok"),
+        "add": (f"{sum(1 for l in leads if (l['created_at'] or '').startswith(today_s))} added today", "ok"),
+        "follow": (f"{due} to send today" if due else "Nothing due", "attention" if due else "ok"),
+        "videos": (f"{len(vids)} video{'s' if len(vids) != 1 else ''}", "ok"),
+        "guide": ("Guide updated " + datetime.fromtimestamp(guide_time).strftime("%b %d, %I:%M %p") if guide_time
+                  else "Guide not written yet", "ok" if guide_time else "attention"),
+        "howto": ("Instructions only", "ok"),
+        "flowmap": (f"{pending} request{'s' if pending != 1 else ''} waiting for you" if pending else "No requests waiting",
+                    "attention" if pending else "ok"),
+        "server": (f"Running since {datetime.fromisoformat(STARTED).strftime('%b %d, %I:%M %p')}", "ok"),
+    }
+    stopped = bots.hard_stopped()
+    out = {}
+    for p in scan["pages"]:
+        bad = [scan["resources"][r] for r in set(p["reads"]) | set(p["saves"]) if not resource_ok(r)]
+        headline, state = live.get(p["id"], ("Working", "ok"))
+        if bad:
+            headline, state = "Can't open: " + ", ".join(bad), "error"
+        out[p["id"]] = {"headline": headline, "state": state}
+    return {"pages": out, "hard_stop": stopped, "pending": pending, "time": now_iso()}
+
+
+def flow_payload():
+    scan = flowmap.current_map()
+    return {"scan": scan, "bots": bots.bots_for(scan), "flows": bots.flows(), "layout": bots.get("layout", "map", {}),
+            "options": bots.options(), "stages": STAGES, "runs": bots.runs(limit=40), "hard_stop": bots.hard_stopped()}
+
+
+def flow_post(path, data):
+    """Every change the Flow Map page can make. Each one is versioned and logged inside bots.py."""
+    page_label = {p["id"]: p["label"] for p in flowmap.current_map()["pages"]}
+    if path == "/api/flowmap/scan":
+        flowmap.current_map(force=True)
+        bots.log("scan", "code", "🔄 Re-scanned the app's code")
+        return flow_payload()
+    if path == "/api/flowmap/layout":
+        pos = {k: {"x": int(v["x"]), "y": int(v["y"])} for k, v in (data.get("positions") or {}).items() if k in page_label}
+        bots.put("layout", "map", pos, "layout", data.get("why") or "Moved boxes on the Flow Map")
+        return {"ok": True}
+    if path == "/api/flowmap/perm":
+        if data.get("page") not in page_label:
+            return {"error": "Unknown page."}
+        scan = flowmap.current_map()
+        page = next(p for p in scan["pages"] if p["id"] == data["page"])
+        catalog = {c["id"]: c["label"] for c in bots.perm_catalog({**page, "_labels": scan["resources"]})}
+        if data.get("perm") not in catalog:
+            return {"error": "This page's bot doesn't have that switch."}
+        return {"perms": bots.set_perm(data["page"], data["perm"], data.get("on"), page_label[data["page"]],
+                                       catalog[data["perm"]])}
+    if path == "/api/flowmap/flow":
+        if data.get("bot") not in page_label:
+            return {"error": "Pick which page's bot runs this flow."}
+        return bots.save_flow(data)
+    if path == "/api/flowmap/flow/state":
+        return bots.set_flow_state(str(data.get("id")), data.get("what"))
+    if path == "/api/flowmap/run":
+        return bots.decide(int(data.get("id") or 0), bool(data.get("approve")), run_bot_action)
+    if path == "/api/flowmap/hardstop":
+        return bots.set_hard_stop(bool(data.get("on")))
+    if path == "/api/flowmap/restore":
+        return bots.restore(data.get("kind"), data.get("key"), data.get("version"))
+    return {"error": "not found"}
 
 
 # ---------------------------------------------------------------- server
@@ -489,6 +607,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_video(unquote(path[len("/videos/"):]))
         elif path == "/api/guide":
             self.send_json({"sections": guide.build(get_layout())})
+        elif path == "/flowmap.js":
+            with open(os.path.join(HERE, "flowmap.js"), "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/api/flowmap":
+            self.send_json(flow_payload())
+        elif path == "/api/flowmap/status":
+            self.send_json(flow_status())
+        elif path == "/api/flowmap/log":
+            self.send_json({"log": bots.read_log(), "runs": bots.runs(limit=100)})
+        elif path == "/api/flowmap/history":
+            q = parse_qs(urlparse(self.path).query)
+            self.send_json({"history": bots.history(q.get("kind", [""])[0], q.get("key", [""])[0])})
         elif path == "/api/ping":
             self.send_json({"ok": True, "app": "remodflow"})
         else:
@@ -569,6 +704,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(add_lead(raw))
         if path == "/api/layout":
             return self.send_json(save_layout(data))
+        if path.startswith("/api/flowmap/"):
+            out = flow_post(path, data)
+            return self.send_json(out, 400 if isinstance(out, dict) and out.get("error") else 200)
         if path == "/api/preview":
             return self.send_json(parse_lead(data.get("raw") or ""))
         m = re.fullmatch(r"/api/leads/(\d+)", path)
@@ -584,6 +722,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     init_db()
+    bots.setup(db, db_lock)
+    bots.start_watcher(all_leads)
     guide.save_markdown(get_layout())
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Remod Flow CRM running at http://127.0.0.1:{PORT}")
