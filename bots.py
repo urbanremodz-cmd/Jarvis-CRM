@@ -132,6 +132,15 @@ def hard_stopped():
     return bool((get("hardstop", "all") or {}).get("on"))
 
 
+_stop_hooks = []
+
+
+def on_hard_stop(fn):
+    """Other parts of the app (like the Sync Hub) register here to cancel their own waiting work."""
+    if fn not in _stop_hooks:
+        _stop_hooks.append(fn)
+
+
 def set_hard_stop(on):
     with _lock:
         put("hardstop", "all", {"on": bool(on)}, "hard-stop", "⛔ HARD STOP turned ON" if on else "▶ Hard stop turned off")
@@ -141,6 +150,8 @@ def set_hard_stop(on):
                                  (now_iso(), "Cancelled by hard stop")).rowcount
             if n:
                 log("hard-stop", "requests", f"Cancelled {n} request(s) that were waiting for approval")
+            for fn in _stop_hooks:
+                fn()
     return {"on": hard_stopped()}
 
 

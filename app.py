@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 import bots
 import flowmap
 import guide
+import hub
 import videos
 from urllib.parse import unquote
 
@@ -500,6 +501,14 @@ def plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
+def hub_status():
+    waiting, disagree = len(hub.outbox()), len(hub.conflicts())
+    on = [s for s in hub.CONNECTORS if hub.system_settings(s)["enabled"]]
+    if waiting or disagree:
+        return (f"{plural(waiting, 'change')} waiting · {plural(disagree, 'disagreement')}", "attention")
+    return (f"{plural(len(on), 'CRM')} syncing" if on else "No CRMs switched on", "ok")
+
+
 def flow_status():
     """Live status for every box on the Flow Map."""
     scan = flowmap.current_map()
@@ -522,6 +531,7 @@ def flow_status():
         "howto": ("Instructions only", "ok"),
         "flowmap": (f"{pending} request{'s' if pending != 1 else ''} waiting for you" if pending else "No requests waiting",
                     "attention" if pending else "ok"),
+        "hub": hub_status(),
         "server": (f"Running since {datetime.fromisoformat(STARTED).strftime('%b %d, %I:%M %p')}", "ok"),
     }
     stopped = bots.hard_stopped()
@@ -577,6 +587,37 @@ def flow_post(path, data):
     return {"error": "not found"}
 
 
+# ---------------------------------------------------------------- sync hub
+
+def create_lead_from_hub(fields):
+    """Adds a customer that another CRM has, the same way pasting their details would, then sets the exact values."""
+    labels = {"name": "Name", "phone": "Phone", "email": "Email", "location": "Lives in", "project": "Wants",
+              "homeowner": "Owns the home", "budget": "Budget", "timeline": "Wants to start"}
+    raw = "\n".join(f"{labels[k]}: {fields[k]}" for k in labels if fields.get(k))
+    new = add_lead(raw or "Name: Unnamed lead")
+    return update_lead(new["id"], {k: v for k, v in fields.items() if k in EDITABLE or k == "stage"}, origin="hub")
+
+
+def hub_post(path, data):
+    """Every change the Sync Hub page can make. Each one is versioned or logged inside hub.py."""
+    sid = data.get("system")
+    if path == "/api/hub/pull":
+        return hub.pull(sid)
+    if path == "/api/hub/system":
+        return hub.set_system(sid, data.get("what"), data.get("on"))
+    if path == "/api/hub/secrets":
+        return hub.set_secrets(sid, data.get("values") or {})
+    if path == "/api/hub/rule":
+        return hub.set_rule(data.get("field"), data.get("rule"))
+    if path == "/api/hub/outbox":
+        return hub.decide(int(data.get("id") or 0), bool(data.get("approve")))
+    if path == "/api/hub/outbox/all":
+        return hub.decide_all(bool(data.get("approve")), sid)
+    if path == "/api/hub/conflict":
+        return hub.resolve(int(data.get("id") or 0), data.get("pick"))
+    return {"error": "not found"}
+
+
 # ---------------------------------------------------------------- server
 
 class Handler(BaseHTTPRequestHandler):
@@ -614,8 +655,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_video(unquote(path[len("/videos/"):]))
         elif path == "/api/guide":
             self.send_json({"sections": guide.build(get_layout())})
-        elif path == "/flowmap.js":
-            with open(os.path.join(HERE, "flowmap.js"), "rb") as f:
+        elif path in ("/flowmap.js", "/hub.js"):
+            with open(os.path.join(HERE, path[1:]), "rb") as f:
                 body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/javascript; charset=utf-8")
@@ -632,6 +673,13 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/flowmap/history":
             q = parse_qs(urlparse(self.path).query)
             self.send_json({"history": bots.history(q.get("kind", [""])[0], q.get("key", [""])[0])})
+        elif path == "/api/hub":
+            self.send_json(hub.overview())
+        elif path == "/api/hub/records":
+            self.send_json({"records": hub.records(), "fields": hub.FIELDS})
+        elif path == "/api/hub/record":
+            q = parse_qs(urlparse(self.path).query)
+            self.send_json({"history": hub.record_history(int((q.get("id") or ["0"])[0] or 0))})
         elif path == "/api/ping":
             self.send_json({"ok": True, "app": "remodflow"})
         else:
@@ -719,6 +767,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(add_lead(raw))
         if path == "/api/layout":
             return self.send_json(save_layout(data))
+        if path.startswith("/api/hub/"):
+            out = hub_post(path, data)
+            return self.send_json(out, 400 if isinstance(out, dict) and out.get("error") else 200)
         if path.startswith("/api/flowmap/"):
             out = flow_post(path, data)
             return self.send_json(out, 400 if isinstance(out, dict) and out.get("error") else 200)
@@ -739,6 +790,8 @@ def main():
     init_db()
     bots.setup(db, db_lock)
     bots.start_watcher(all_leads)
+    hub.setup(db, db_lock, hub.LocalConnector(all_leads, update_lead, create_lead_from_hub, STAGES))
+    hub.start_auto_pull()
     guide.save_markdown(get_layout())
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Remod Flow CRM running at http://127.0.0.1:{PORT}")
