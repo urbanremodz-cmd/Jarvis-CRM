@@ -31,6 +31,7 @@ BOX_STEPS = {
 
 
 def build(layout):
+    """Writes the How to Use steps, matching your box names and order."""
     label = lambda s: layout["labels"].get(s, s)
     box = lambda s: f"{ICON[s]} {label(s)}"
     hidden = set(layout["hidden"])
@@ -121,6 +122,9 @@ def build(layout):
                 ("Click **🧭 Flow Map**. Each box is a page. It shows what the page reads, what it saves, which pages it feeds, "
                  "its schedules and any outside services. The dot shows how the page is doing right now.",
                  "Green is good, yellow needs you, red means something is wrong, black means the hard stop is on."),
+                ("Point at a box to see what that page does, in plain words. Press its **🔍** to break it down into every step behind it, "
+                 "and press **🔍 Break it down** on any step to go a layer deeper.",
+                 "Use the links at the top of the break-down (or **⬅ Back**) to climb back up."),
                 ("Drag a box by its top bar to move it. The lines move around the boxes by themselves.",
                  "Boxes need a little space between them. If you drop one too close, it goes back."),
                 ("Click a box to see its details and its 🤖 bot. Turn on only the switches you want that bot to have.",
@@ -184,6 +188,7 @@ def to_markdown(layout):
 
 
 def save_markdown(layout):
+    """Saves the How to Use guide as a file next to the app."""
     try:
         with open(MD_PATH, "w", encoding="utf-8") as f:
             f.write(to_markdown(layout))

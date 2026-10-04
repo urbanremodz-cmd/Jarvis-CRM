@@ -18,6 +18,7 @@ COMING_SOON = [
 
 
 def _ensure():
+    """Makes the videos folder and its list file if they don't exist yet."""
     os.makedirs(VIDEO_DIR, exist_ok=True)
 
 
@@ -41,6 +42,7 @@ def nice_title(filename):
 
 
 def list_videos():
+    """Lists the training videos with their names and descriptions."""
     _ensure()
     meta = _meta()
     files = sorted(
@@ -67,6 +69,7 @@ def safe_name(name):
 
 
 def video_path(name):
+    """Finds a video file safely inside the videos folder."""
     name = os.path.basename(name)
     path = os.path.join(VIDEO_DIR, name)
     if os.path.splitext(name)[1].lower() in SERVE_TYPES and os.path.isfile(path):
@@ -89,6 +92,7 @@ def start_upload(filename):
 
 
 def set_info(filename, title=None, description=None, added=None):
+    """Saves a training video's name and description."""
     meta = _meta()
     entry = meta.setdefault(os.path.basename(filename), {})
     if title is not None:
@@ -101,6 +105,7 @@ def set_info(filename, title=None, description=None, added=None):
 
 
 def delete(filename):
+    """Removes a training video and its name."""
     path = video_path(filename)
     if path:
         os.remove(path)

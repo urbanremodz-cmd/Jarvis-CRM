@@ -38,6 +38,7 @@ OPS = {"is": "is", "is_not": "is not", "at_least": "is at least", "at_most": "is
 
 
 def setup(db, lock):
+    """Creates the tables for bot settings, the change log and bot requests."""
     SETUP["db"], SETUP["lock"] = db, lock
     with SETUP["lock"], _db() as conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS flow_versions (
@@ -63,6 +64,7 @@ def now_iso():
 # ---------------------------------------------------------------- versioned store + change log
 
 def get(kind, key, default=None):
+    """Loads the newest version of a setting."""
     with _db() as conn:
         r = conn.execute("SELECT value FROM flow_versions WHERE kind=? AND key=? ORDER BY version DESC LIMIT 1",
                          (kind, key)).fetchone()
@@ -70,6 +72,7 @@ def get(kind, key, default=None):
 
 
 def _version(kind, key):
+    """Finds the newest version number of a setting."""
     with _db() as conn:
         r = conn.execute("SELECT MAX(version) AS v FROM flow_versions WHERE kind=? AND key=?", (kind, key)).fetchone()
     return r["v"] or 0
@@ -90,6 +93,7 @@ def put(kind, key, value, action, detail, who=WHO):
 
 
 def log(action, target, detail, before=None, after=None, who=WHO):
+    """Writes one line in the change log."""
     with SETUP["lock"], _db() as conn:
         conn.execute("INSERT INTO flow_log (ts, who, action, target, detail, before, after) VALUES (?,?,?,?,?,?,?)",
                      (now_iso(), who, action, target, detail,
@@ -97,12 +101,14 @@ def log(action, target, detail, before=None, after=None, who=WHO):
 
 
 def read_log(limit=200):
+    """Loads the change log, newest first."""
     with _db() as conn:
         rows = conn.execute("SELECT * FROM flow_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
 
 
 def history(kind, key):
+    """Lists every saved version of a setting, newest first."""
     with _db() as conn:
         rows = conn.execute("SELECT version, value, ts, note FROM flow_versions WHERE kind=? AND key=? ORDER BY version DESC",
                             (kind, key)).fetchall()
@@ -129,6 +135,7 @@ def restore(kind, key, version):
 # ---------------------------------------------------------------- hard stop
 
 def hard_stopped():
+    """Checks whether the hard stop is on."""
     return bool((get("hardstop", "all") or {}).get("on"))
 
 
@@ -142,6 +149,7 @@ def on_hard_stop(fn):
 
 
 def set_hard_stop(on):
+    """Turns the hard stop on or off. Turning it on cancels everything waiting for approval."""
     with _lock:
         put("hardstop", "all", {"on": bool(on)}, "hard-stop", "⛔ HARD STOP turned ON" if on else "▶ Hard stop turned off")
         if on:
@@ -177,10 +185,12 @@ def perm_catalog(page):
 
 
 def perms(page_id):
+    """Loads a page bot's switches."""
     return get("perms", page_id, {}) or {}
 
 
 def set_perm(page_id, perm, on, page_label, perm_label=None):
+    """Turns one of a page bot's switches on or off, saved as a new version."""
     cur = dict(perms(page_id))
     cur[perm] = bool(on)
     put("perms", page_id, cur, "permission", f"{page_label} bot: {'allowed' if on else 'blocked'} \"{perm_label or perm}\"")
@@ -190,6 +200,7 @@ def set_perm(page_id, perm, on, page_label, perm_label=None):
 # ---------------------------------------------------------------- flows
 
 def flows(include_deleted=False):
+    """Lists all your flows."""
     with _db() as conn:
         keys = [r["key"] for r in conn.execute("SELECT DISTINCT key FROM flow_versions WHERE kind='flow'")]
     out = []
@@ -201,6 +212,7 @@ def flows(include_deleted=False):
 
 
 def flow(fid):
+    """Loads one flow with its version and whether it's on, paused or waiting for approval."""
     d = get("flow", fid)
     if d is None:
         return None
@@ -239,6 +251,7 @@ def _clean_flow(data):
 
 
 def _save_flow_def(fid, value, why):
+    """Saves a flow as a new version that waits for your approval."""
     with _lock:
         v = put("flow", fid, value, "flow-edit", f"Flow \"{value['name']}\": {why}. Needs your approval.")
         st = dict(get("flow_state", fid, {}) or {})
@@ -257,6 +270,7 @@ def save_flow(data):
 
 
 def set_flow_state(fid, what, version=None):
+    """Approves, pauses, turns back on or removes a flow, and logs it."""
     f = flow(fid)
     if not f:
         return {"error": "That flow wasn't found."}
@@ -284,12 +298,14 @@ def set_flow_state(fid, what, version=None):
 
 
 def _cancel_pending(fid, why):
+    """Cancels a flow's requests that are still waiting for you."""
     with SETUP["lock"], _db() as conn:
         conn.execute("UPDATE flow_runs SET status='cancelled', decided_at=?, result=? WHERE flow_id=? AND status='pending'",
                      (now_iso(), why, fid))
 
 
 def needed_perms(f):
+    """Lists the switches a flow's bot needs."""
     need = {"watch:table:leads"}
     if f["actions"]:
         need.add("change:table:leads")
@@ -297,6 +313,7 @@ def needed_perms(f):
 
 
 def missing_perms(f):
+    """Lists the switches a flow's bot still needs turned on."""
     p = perms(f["bot"])
     return sorted(x for x in needed_perms(f) if not p.get(x))
 
@@ -304,6 +321,7 @@ def missing_perms(f):
 # ---------------------------------------------------------------- noticing things -> requests
 
 def _days_in_stage(lead):
+    """Counts how many days a customer has been in their current box."""
     try:
         return (datetime.now() - datetime.fromisoformat(lead.get("stage_changed_at") or "")).days
     except ValueError:
@@ -318,6 +336,7 @@ def _num(v):
 
 
 def matches(conds, lead):
+    """Checks a flow's \"Only if\" rules against a customer."""
     for c in conds:
         have = _days_in_stage(lead) if c["field"] == "days_in_stage" else lead.get(c["field"])
         want, op = c["value"], c["op"]
@@ -335,6 +354,7 @@ def matches(conds, lead):
 
 
 def _describe(f, lead):
+    """Writes a flow's actions in plain words for the request and the log."""
     bits = []
     for a in f["actions"]:
         bits.append(f"move {lead.get('name')} to \"{a['stage']}\"" if a["type"] == "move" else f"add note \"{a['text']}\"")
@@ -362,6 +382,7 @@ def _propose(f, lead, why, dedupe):
 
 
 def active_flows():
+    """Lists the flows that are approved and switched on."""
     return [f for f in flows() if f["status"] == "on"]
 
 
@@ -408,6 +429,7 @@ def tick(all_leads):
 
 
 def start_watcher(all_leads):
+    """Starts the background check, once a minute, for time-based flows."""
     def loop():
         while not _stop_event.is_set():
             try:
@@ -421,6 +443,7 @@ def start_watcher(all_leads):
 # ---------------------------------------------------------------- approving requests
 
 def runs(status=None, limit=100):
+    """Lists bot requests, optionally only the waiting ones."""
     with _db() as conn:
         if status:
             rows = conn.execute("SELECT * FROM flow_runs WHERE status=? ORDER BY id DESC LIMIT ?", (status, limit))
@@ -464,6 +487,7 @@ def decide(run_id, approve, execute):
 
 
 def _finish(run_id, status, result):
+    """Marks a bot request as done, refused, cancelled or failed."""
     with SETUP["lock"], _db() as conn:
         conn.execute("UPDATE flow_runs SET status=?, decided_at=?, result=? WHERE id=?", (status, now_iso(), result, run_id))
 
@@ -471,6 +495,7 @@ def _finish(run_id, status, result):
 # ---------------------------------------------------------------- what the Flow Map page shows
 
 def bots_for(scan):
+    """Works out each page bot's switches, flows and waiting requests for the map."""
     out = {}
     fl = flows()
     pending = runs("pending")
@@ -493,4 +518,5 @@ def bots_for(scan):
 
 
 def options():
+    """Lists the choices for the flow editor: triggers, actions, fields and checks."""
     return {"triggers": TRIGGERS, "actions": ACTIONS, "fields": FIELDS, "ops": OPS}

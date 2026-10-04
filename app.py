@@ -98,12 +98,14 @@ db_lock = threading.Lock()
 
 
 def db():
+    """Opens the app's database file."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
+    """Creates the customer and settings tables the first time the app runs."""
     with db() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS leads (
@@ -121,6 +123,7 @@ def init_db():
 
 
 def get_layout():
+    """Loads your box order, names and hidden boxes."""
     with db() as conn:
         r = conn.execute("SELECT value FROM settings WHERE key='layout'").fetchone()
     saved = json.loads(r["value"]) if r else {}
@@ -132,6 +135,7 @@ def get_layout():
 
 
 def save_layout(data):
+    """Saves your box order, names and hidden boxes, and refreshes the How to Use guide."""
     if data.get("reset"):
         with db_lock, db() as conn:
             conn.execute("DELETE FROM settings WHERE key='layout'")
@@ -162,11 +166,13 @@ LABEL_LINE = r"(?im)^[\s*\-•]*(?:{labels})\b[^:=\n]*?(?:[:=]|\s[-–]\s)\s*(.+
 
 
 def grab(text, labels):
+    """Finds a labeled value (like \"Phone: ...\") in a pasted message."""
     m = re.search(LABEL_LINE.format(labels="|".join(labels)), text)
     return m.group(1).strip() if m else ""
 
 
 def money_values(s, need_marker=False):
+    """Finds dollar amounts in a pasted message."""
     vals = []
     for m in re.finditer(r"(\$)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|K|thousand|grand)?", s):
         dollar, num, k = m.groups()
@@ -203,6 +209,7 @@ def parse_budget(text):
 
 
 def parse_timeline(text):
+    """Works out when the customer wants to start."""
     field = grab(text, ["timeline", "target start date", "start date", "wants to start", "start", "when"])
     src = (field or text).lower()
     if re.search(r"research|just looking|browsing|not sure|someday|next year|1\+\s*y|12\+|a year|years? (out|away|from now)|over a year", src):
@@ -226,6 +233,7 @@ def parse_timeline(text):
 
 
 def parse_homeowner(text):
+    """Works out from the message whether the customer owns their home."""
     field = grab(text, ["homeowner status", "homeowner", "do you own", "owns the home", "owns home", "own the home", "property owner", "owner", "own home"])
     src = field.lower()
     if field:
@@ -242,6 +250,7 @@ def parse_homeowner(text):
 
 
 def parse_lead(text):
+    """Turns a pasted message into customer details (name, phone, email, project, budget, timeline) and picks their box."""
     email_m = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
     text = text.replace("_", " ")
     name = grab(text, ["lead name", "full name", "name", "customer", "client", "contact name"])
@@ -313,17 +322,20 @@ def route(lead):
 # ---------------------------------------------------------------- drafts
 
 def first_name(lead):
+    """Picks out a customer's first name for friendly messages."""
     n = (lead.get("name") or "").strip()
     return n.split()[0] if n else "there"
 
 
 def project_word(lead, cap=True):
+    """Picks a short word for the customer's project, like kitchen or bath."""
     p = lead.get("project") or ""
     word = {"Kitchen": "Kitchen", "Bathroom": "Bathroom", "Both": "Kitchen and Bathroom"}.get(p, "remodeling")
     return word if cap else word.lower()
 
 
 def drafts(lead):
+    """Writes the text and email drafts for a customer, using their name and project."""
     loc = re.sub(r"[,\s]*(\bCO\b|Colorado)?[,\s]*\d{5}(-\d{4})?\s*$", "", lead.get("location") or "").strip(" ,")
     loc = re.sub(r",\s*(CO|Colorado)$", "", loc) or "your"
     a = (
@@ -341,6 +353,7 @@ def drafts(lead):
 
 
 def nurture_schedule(lead):
+    """Works out the dates of the monthly follow-up emails for a customer."""
     if not lead.get("nurture_start"):
         return []
     start = datetime.fromisoformat(lead["nurture_start"])
@@ -358,6 +371,7 @@ def nurture_schedule(lead):
 
 
 def enrich(row):
+    """Adds the extras a customer card shows: message drafts, next step, monthly email dates and check-in due time."""
     lead = dict(row)
     lead.update(drafts(lead))
     lead["next_step"] = NEXT_STEP.get(lead["stage"], "")
@@ -377,16 +391,19 @@ def now_iso():
 
 
 def all_leads():
+    """Loads every customer, newest first, with their message drafts and due dates filled in."""
     with db() as conn:
         return [enrich(r) for r in conn.execute("SELECT * FROM leads ORDER BY created_at DESC")]
 
 
 def get_lead(conn, lid):
+    """Loads one customer."""
     r = conn.execute("SELECT * FROM leads WHERE id=?", (lid,)).fetchone()
     return enrich(r) if r else None
 
 
 def add_lead(raw):
+    """Reads the pasted message, works out the customer's details and which box they belong in, and saves them."""
     lead = parse_lead(raw)
     ts = now_iso()
     with db_lock, db() as conn:
@@ -408,6 +425,7 @@ EDITABLE = ["name", "phone", "email", "location", "project", "homeowner", "budge
 
 
 def update_lead(lid, data, origin="you"):
+    """Saves changes to a customer, moves them to a new box if asked, and tells the bots when they change box."""
     with db_lock, db() as conn:
         cur = get_lead(conn, lid)
         if not cur:
@@ -473,6 +491,7 @@ def run_bot_action(action, lid):
 
 
 def delete_lead(lid):
+    """Removes a customer for good."""
     with db_lock, db() as conn:
         conn.execute("DELETE FROM leads WHERE id=?", (lid,))
 
@@ -483,6 +502,7 @@ STARTED = now_iso()
 
 
 def resource_ok(res):
+    """Checks that a table or file a page needs can be opened, for the status dot."""
     kind, name = res.split(":", 1)
     try:
         if kind == "table":
@@ -498,10 +518,12 @@ def resource_ok(res):
 
 
 def plural(n, word):
+    """Writes a count with the right word, like \"1 customer\" or \"2 customers\"."""
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
 def hub_status():
+    """Works out the Sync Hub's live status line for its box on the Flow Map."""
     waiting, disagree = len(hub.outbox()), len(hub.conflicts())
     on = [s for s in hub.CONNECTORS if hub.system_settings(s)["enabled"]]
     if waiting or disagree:
@@ -546,6 +568,7 @@ def flow_status():
 
 
 def flow_payload():
+    """Gathers everything the Flow Map page draws: the code scan, bots, flows, box positions and recent requests."""
     scan = flowmap.current_map()
     return {"scan": scan, "bots": bots.bots_for(scan), "flows": bots.flows(), "layout": bots.get("layout", "map", {}),
             "options": bots.options(), "stages": STAGES, "runs": bots.runs(limit=40), "hard_stop": bots.hard_stopped()}
@@ -686,6 +709,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, 404)
 
     def send_video(self, name):
+        """Plays a training video in the browser, a piece at a time."""
         fpath = videos.video_path(name)
         if not fpath:
             return self.send_json({"error": "not found"}, 404)
@@ -721,6 +745,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def receive_video(self):
+        """Saves a training video you upload."""
         length = int(self.headers.get("Content-Length") or 0)
         try:
             name, out = videos.start_upload(unquote(self.headers.get("X-Filename", "")))
@@ -787,6 +812,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    """Starts the app: sets up the database, bots and Sync Hub, starts the timers and opens the web page server."""
     init_db()
     bots.setup(db, db_lock)
     bots.start_watcher(all_leads)
