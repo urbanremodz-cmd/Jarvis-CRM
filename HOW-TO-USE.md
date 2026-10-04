@@ -1,6 +1,6 @@
 # Remod Flow: How to Use
 
-_Updated October 03, 2026. This guide updates itself when you change your boxes._
+_Updated October 04, 2026. This guide updates itself when you change your boxes._
 
 ## ☀️ Every morning (5 minutes)
 
@@ -89,39 +89,41 @@ The Flow Map draws your whole app as boxes, built by reading the app's own code.
 
 30. Click **🧭 Flow Map**. Each box is a page. It shows what the page reads, what it saves, which pages it feeds, its schedules and any outside services. The dot shows how the page is doing right now.
    - 💡 Green is good, yellow needs you, red means something is wrong, black means the hard stop is on.
-31. Drag a box by its top bar to move it. The lines move around the boxes by themselves.
+31. Point at a box to see what that page does, in plain words. Press its **🔍** to break it down into every step behind it, and press **🔍 Break it down** on any step to go a layer deeper.
+   - 💡 Use the links at the top of the break-down (or **⬅ Back**) to climb back up.
+32. Drag a box by its top bar to move it. The lines move around the boxes by themselves.
    - 💡 Boxes need a little space between them. If you drop one too close, it goes back.
-32. Click a box to see its details and its 🤖 bot. Turn on only the switches you want that bot to have.
+33. Click a box to see its details and its 🤖 bot. Turn on only the switches you want that bot to have.
    - 💡 Every bot starts with all switches off. Each switch you flip is saved as a new version.
-33. Press **➕ New flow** and fill in the boxes left to right: **⚡ When…**, **❓ Only if…**, **▶ Then ask to…**. Press **💾 Save as a new version**, then **✅ Approve** it.
+34. Press **➕ New flow** and fill in the boxes left to right: **⚡ When…**, **❓ Only if…**, **▶ Then ask to…**. Press **💾 Save as a new version**, then **✅ Approve** it.
    - 💡 A flow stays off until you approve it. If you edit it, you approve the new version again.
-34. When a flow wants to do something, a request shows at the top of the Flow Map. Press **✅ Approve** to do it or **✖ No** to skip it.
+35. When a flow wants to do something, a request shows at the top of the Flow Map. Press **✅ Approve** to do it or **✖ No** to skip it.
    - 💡 This is the only way a bot ever changes a customer.
-35. Something looks wrong? Press the red **⛔ HARD STOP**.
+36. Something looks wrong? Press the red **⛔ HARD STOP**.
    - 💡 Every bot freezes at once and anything waiting is cancelled. A red Bots stopped tag shows at the top of every page until you turn it off.
-36. Press **📜 Change log** to see every change, newest first. Click **versions** to go back to an earlier version.
+37. Press **📜 Change log** to see every change, newest first. Click **versions** to go back to an earlier version.
    - 💡 Going back is saved as a new version, so nothing is ever lost.
 
 ## 🔗 Sync Hub: one master copy across your CRMs
 
 The Sync Hub keeps one master copy of every customer and keeps your CRMs in step. Nothing is written into a CRM until you press Approve.
 
-37. Click **🔗 Sync Hub**. Under **Your CRMs**, switch on **Sync this CRM** for Remod Flow and for GoHighLevel.
+38. Click **🔗 Sync Hub**. Under **Your CRMs**, switch on **Sync this CRM** for Remod Flow and for GoHighLevel.
    - 💡 Syncing only reads. It never changes anything in your CRMs by itself.
-38. For GoHighLevel, open **🔑 Connection** and paste your private integration token and location ID. Add your pipeline ID too if you want stages and job worth to sync. Press **Save**.
+39. For GoHighLevel, open **🔑 Connection** and paste your private integration token and location ID. Add your pipeline ID too if you want stages and job worth to sync. Press **Save**.
    - 💡 Name your GoHighLevel stages the same as your Remod Flow boxes so they match up. Keys stay on this computer.
-39. Press **🔄 Sync everything now**. The same person in two CRMs is matched by email or phone, so you get one master record.
+40. Press **🔄 Sync everything now**. The same person in two CRMs is matched by email or phone, so you get one master record.
    - 💡 After that, switched-on CRMs are read again every few minutes while the app is open.
-40. When a CRM is missing something, it shows under **Waiting for your approval**. Turn on **Write approved changes into it** for that CRM, then press **✅ Approve** (or **✅ Approve all**).
+41. When a CRM is missing something, it shows under **Waiting for your approval**. Turn on **Write approved changes into it** for that CRM, then press **✅ Approve** (or **✅ Approve all**).
    - 💡 Say **✖ No** and you won't be asked about that exact change again.
-41. If two CRMs disagree, it shows under **⚖ Two CRMs disagree**. Click the value that's right.
+42. If two CRMs disagree, it shows under **⚖ Two CRMs disagree**. Click the value that's right.
    - 💡 Under **When two CRMs disagree** you can make a CRM the boss for a field, or have Jarvis ask you every time.
-42. The **⛔ HARD STOP** on the Flow Map freezes syncing too, and cancels every change waiting to be written.
+43. The **⛔ HARD STOP** on the Flow Map freezes syncing too, and cancels every change waiting to be written.
    - 💡 Every sync, approval and change is in the **📜 Change log**. Click a master record to see all its versions.
 
 ## 🎨 Make it yours
 
-43. On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.
+44. On **🏠 My Leads**, press **🎨 Customize boxes** to move, rename or hide boxes. Press **✔ Done** when finished.
    - 💡 This guide updates itself to match your box names and order.
-44. Not sure what a button does? Point your mouse at it (or tap it) to see a tip.
+45. Not sure what a button does? Point your mouse at it (or tap it) to see a tip.
    - 💡 Every button has one.

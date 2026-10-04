@@ -40,6 +40,7 @@ AUTO_PULL_MINUTES = 5
 
 
 def setup(db, lock, local):
+    """Creates the Sync Hub's tables and connects it to the hard stop."""
     SETUP.update(db=db, lock=lock, local=local)
     CONNECTORS[local.id] = local
     with SETUP["lock"], db() as conn:
@@ -77,15 +78,18 @@ def local_time(iso):
 
 
 def norm_email(v):
+    """Tidies an email address so matches aren't missed."""
     return str(v or "").strip().lower()
 
 
 def norm_phone(v):
+    """Keeps just the last 10 digits of a phone number so matches aren't missed."""
     digits = re.sub(r"\D", "", str(v or ""))
     return digits[-10:] if len(digits) >= 10 else digits
 
 
 def _same(field, a, b):
+    """Checks whether two values are really the same (ignoring case in emails and formatting in phone numbers)."""
     if field == "email":
         return norm_email(a) == norm_email(b)
     if field == "phone":
@@ -114,6 +118,7 @@ def set_system(sid, what, on):
 
 
 def rules():
+    """Loads who wins for each field when CRMs disagree."""
     return {f: DEFAULT_RULE for f in FIELDS} | (bots.get("hub_rules", "fields", {}) or {})
 
 
@@ -128,6 +133,7 @@ def set_rule(field, rule):
 
 
 def secret(sid, key):
+    """Reads a saved key (like an API token) from this computer's database."""
     with _db() as conn:
         r = conn.execute("SELECT value FROM hub_secrets WHERE system=? AND key=?", (sid, key)).fetchone()
     return r["value"] if r else ""
@@ -153,6 +159,7 @@ def set_secrets(sid, values):
 # ---------------------------------------------------------------- master records
 
 def _record(conn, rid):
+    """Loads one master record."""
     r = conn.execute("SELECT * FROM hub_records WHERE id=?", (rid,)).fetchone()
     return {**dict(r), "data": json.loads(r["data"])} if r else None
 
@@ -163,6 +170,7 @@ def record(rid):
 
 
 def records(limit=500):
+    """Lists master records with the CRMs each one is linked to."""
     with _db() as conn:
         rows = conn.execute("SELECT * FROM hub_records ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
         links = conn.execute("SELECT system, ext_id, record_id, synced_at FROM hub_links").fetchall()
@@ -173,12 +181,14 @@ def records(limit=500):
 
 
 def record_history(rid):
+    """Lists every version of a master record."""
     with _db() as conn:
         rows = conn.execute("SELECT * FROM hub_record_versions WHERE record_id=? ORDER BY version DESC", (rid,)).fetchall()
     return [{**dict(r), "data": json.loads(r["data"])} for r in rows]
 
 
 def _save_record(conn, rid, data, why):
+    """Saves a master record as a new version."""
     ts = now_iso()
     if rid is None:
         cur = conn.execute("INSERT INTO hub_records (data, version, created_at, updated_at) VALUES (?,1,?,?)",
@@ -213,6 +223,7 @@ def _find_match(conn, sid, ext_id, fields):
 
 
 def _link(conn, sid, ext_id, rid, seen):
+    """Remembers which record in a CRM is which master record, and what that CRM last had."""
     conn.execute("INSERT OR REPLACE INTO hub_links (system, ext_id, record_id, seen, synced_at) VALUES (?,?,?,?,?)",
                  (sid, str(ext_id), rid, json.dumps(seen), now_iso()))
 
@@ -367,6 +378,7 @@ def plan_outbox(rid):
 
 
 def outbox(status="pending", limit=200):
+    """Lists changes waiting for your approval before they're written into a CRM."""
     with _db() as conn:
         rows = conn.execute("SELECT * FROM hub_outbox WHERE status=? ORDER BY id DESC LIMIT ?", (status, limit)).fetchall()
         out = []
@@ -440,6 +452,7 @@ def _finish(oid, status, result):
 
 
 def _cancel_outbox(why="Cancelled by hard stop", system=None):
+    """Cancels changes waiting to be written into CRMs (by the hard stop, or when writing is switched off)."""
     with SETUP["lock"], _db() as conn:
         q = "UPDATE hub_outbox SET status='stopped', decided_at=?, result=? WHERE status='pending'"
         args = [now_iso(), why]
@@ -454,6 +467,7 @@ def _cancel_outbox(why="Cancelled by hard stop", system=None):
 # ---------------------------------------------------------------- conflicts
 
 def conflicts(status="open"):
+    """Lists the fields where two CRMs disagree and you need to pick."""
     with _db() as conn:
         rows = conn.execute("SELECT * FROM hub_conflicts WHERE status=? ORDER BY id DESC", (status,)).fetchall()
         out = []
@@ -549,6 +563,7 @@ class GoHighLevelConnector(Connector):
         return True, "Ready"
 
     def _call(self, method, path, body=None, query=None):
+        """Sends one request to GoHighLevel with your token and reads the answer."""
         url = self.BASE + path + ("?" + urllib.parse.urlencode(query) if query else "")
         req = urllib.request.Request(url, method=method, data=json.dumps(body).encode() if body is not None else None,
                                      headers={"Authorization": f"Bearer {secret(self.id, 'token')}", "Version": self.VERSION,
@@ -561,6 +576,7 @@ class GoHighLevelConnector(Connector):
             raise RuntimeError(f"GoHighLevel said {e.code}: {detail}") from None
 
     def _stages(self):
+        """Reads your GoHighLevel pipeline's stage names."""
         pid = secret(self.id, "pipeline_id")
         if not pid:
             return None, {}
@@ -571,6 +587,7 @@ class GoHighLevelConnector(Connector):
         raise RuntimeError("that pipeline ID wasn't found in this location")
 
     def _opportunities(self, pid):
+        """Reads the GoHighLevel pipeline's opportunities, to get each contact's stage and job worth."""
         out, page = {}, 1
         while pid:
             data = self._call("GET", "/opportunities/search", query={"location_id": secret(self.id, "location_id"),
@@ -667,6 +684,7 @@ def start_auto_pull():
 
 
 def overview():
+    """Gathers everything the Sync Hub page shows: CRMs, master record count, waiting changes and disagreements."""
     systems = []
     with _db() as conn:
         counts = {r["system"]: r["n"] for r in conn.execute("SELECT system, COUNT(*) AS n FROM hub_links GROUP BY system")}

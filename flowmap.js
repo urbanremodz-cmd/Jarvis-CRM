@@ -28,15 +28,16 @@ function boxHtml(p) {
   const bot = FM.map.bots[p.id];
   const chips = (list, cls = "") => list.length ? list.map(r => `<span class="fm-chip ${cls}">${esc(fmRes(r))}</span>`).join("") : "<i>nothing</i>";
   const outside = p.outside.map(o => o.kind === "mentioned" ? `${esc(o.name)} (talks about)` : esc(o.name));
-  return `<div class="fm-head" data-tip="Drag here to move this box. Click to see all its details.">
-      <span class="grip">⠿</span><span class="name">${p.icon} ${esc(p.label)}</span><span class="fm-dot" data-dot></span></div>
+  return `<div class="fm-head">
+      <span class="grip">⠿</span><span class="name">${p.icon} ${esc(p.label)}</span>
+      <button class="fm-drill" data-drill="${p.id}" aria-label="Break ${esc(p.label)} down into its steps">🔍</button><span class="fm-dot" data-dot></span></div>
     <div class="fm-live" data-live>Checking…</div>
     <div class="fm-row" style="margin-top:4px">📖 <b>Reads:</b> ${chips(p.reads)}</div>
     <div class="fm-row">💾 <b>Saves:</b> ${chips(p.saves, "w")}</div>
     <div class="fm-row">➡ <b>Feeds:</b> ${p.feeds.length ? p.feeds.map(f => esc(fmName(f))).join(", ") : "<i>no other page</i>"}</div>
     <div class="fm-row">⏰ <b>Schedules:</b> ${p.schedules.length ? p.schedules.map(s => esc(s.label)).join("; ") : "<i>none</i>"}</div>
     <div class="fm-row">🌐 <b>Outside:</b> ${outside.length ? outside.join(", ") : "<i>none</i>"}</div>
-    ${bot ? `<div class="fm-bot" data-botline data-tip="Click to set what this page's bot may do.">🤖 <span data-bot>${botLine(p.id)}</span></div>`
+    ${bot ? `<div class="fm-bot" data-botline>🤖 <span data-bot>${botLine(p.id)}</span></div>`
           : `<div class="fm-bot" style="cursor:default">🖥 Runs by itself in the background</div>`}`;
 }
 
@@ -57,6 +58,7 @@ function drawBoxes() {
     el.innerHTML = boxHtml(p);
     canvas.appendChild(el);
     wireDrag(el);
+    wireHover(el);
   }
   canvas.querySelectorAll(".fm-box").forEach(el => FM.size[el.dataset.id] = {w: el.offsetWidth, h: el.offsetHeight});
   const missing = FM.map.scan.pages.some(p => !FM.pos[p.id]);
@@ -123,7 +125,7 @@ function freeSpot(id, p) {
 function wireDrag(el) {
   const id = el.dataset.id, head = el.querySelector(".fm-head");
   head.addEventListener("pointerdown", e => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.target.closest("[data-drill]")) return;
     hideTip();
     head.setPointerCapture(e.pointerId);
     const start = {...FM.pos[id]}, sx = e.clientX, sy = e.clientY;
@@ -149,6 +151,7 @@ function wireDrag(el) {
     head.addEventListener("pointermove", move); head.addEventListener("pointerup", up); head.addEventListener("pointercancel", up);
   });
   el.addEventListener("click", e => {
+    if (e.target.closest("[data-drill]")) { hideHover(); return openDrill([{page: id}]); }
     if (e.target.closest(".fm-head")) return;
     if (e.target.closest("[data-botline]")) return selectPage(id, true);
     selectPage(id);
@@ -373,6 +376,8 @@ function renderPanel() {
   panel.innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:19px">${p.icon} ${esc(p.label)}</h2>
       <button class="btn ghost small" onclick="FM.sel=null;selectPage(null)" data-tip="Close and go back to the map key.">✖</button></div>
     <p style="margin:6px 0"><span class="fm-dot ${st.state || ""}" style="display:inline-block;vertical-align:middle"></span> ${esc(st.headline || "")}</p>
+    ${p.about ? `<p>${esc(p.about)}</p>` : ""}
+    <button class="btn small" onclick="openDrill([{page:'${p.id}'}])">🔍 Break it down</button>
     <h3>📖 Reads</h3>${li(p.reads, r => `<li>${esc(fmRes(r))} <span class="fm-where">${esc(r)}</span></li>`)}
     <h3>💾 Saves</h3>${li(p.saves, r => `<li>${esc(fmRes(r))} <span class="fm-where">${esc(r)}</span></li>`)}
     <h3>➡ Feeds these pages</h3>${li(p.feeds, f => `<li><a href="#" onclick="selectPage('${f}');return false">${esc(fmName(f))}</a></li>`)}
@@ -594,3 +599,111 @@ $("#hsPill").onclick = () => document.querySelector('nav button[data-page="flowm
 
 // show the hard-stop warning in the top bar on every page
 api("/api/flowmap/status").then(s => { $("#hsPill").hidden = !s.hard_stop; }).catch(() => {});
+
+
+// ---------------------------------------------------------------- hover details + break it down
+
+const fmFn = k => FM.map.scan.functions[k];
+const fmHuman = name => { const t = name.replace(/^_+/, "").replace(/_/g, " "); return t.charAt(0).toUpperCase() + t.slice(1); };
+const fmFirst = text => (text.match(/^.*?[.!?](\s|$)/) || [text])[0].trim();
+
+function fnSummary(k) {
+  const f = fmFn(k);
+  if (!f) return fmHuman(k.split(".").pop());
+  if (f.doc) return f.doc;
+  const bits = [];
+  if (f.reads.length) bits.push("Reads " + f.reads.map(fmRes).join(", "));
+  if (f.saves.length) bits.push("saves " + f.saves.map(fmRes).join(", "));
+  if (f.outside.length) bits.push("reaches " + f.outside.join(", "));
+  return bits.length ? bits.join("; ") + "." : "A small helper step.";
+}
+
+function actionTitle(e) {
+  const k = e.steps.find(s => fmFn(s) && fmFn(s).doc) || e.steps[0];
+  return k ? fmFirst(fnSummary(k)) : (e.method === "GET" ? "Loads " : "Sends ") + e.path;
+}
+
+const actionWhen = e => e.method === "GET" ? "When the page opens or refreshes" : e.method === "POST" ? "When you press a button" : "Runs by itself";
+
+function wireHover(el) {
+  el.addEventListener("mouseenter", () => {
+    clearTimeout(FM.hoverT);
+    FM.hoverT = setTimeout(() => { if (!el.classList.contains("dragging")) showHover(el); }, 350);
+  });
+  el.addEventListener("mouseleave", () => { clearTimeout(FM.hoverT); hideHover(); });
+}
+
+function showHover(el) {
+  const p = fmPage(el.dataset.id), st = (FM.status && FM.status.pages[p.id]) || {};
+  const acts = [...new Map(p.endpoints.map(e => [actionTitle(e), e])).values()];
+  let card = $("#fmHover");
+  if (!card) { card = document.createElement("div"); card.id = "fmHover"; document.body.appendChild(card); }
+  card.innerHTML = `<b>${p.icon} ${esc(p.label)}</b>${st.headline ? ` <span class="muted">· ${esc(st.headline)}</span>` : ""}
+    ${p.about ? `<p>${esc(p.about)}</p>` : ""}
+    ${acts.length ? `<div class="fm-h-t">What it does</div><ul>${acts.slice(0, 6).map(e => `<li>${esc(actionTitle(e))}</li>`).join("")}
+      ${acts.length > 6 ? `<li class="muted">…and ${acts.length - 6} more</li>` : ""}</ul>` : ""}
+    <div class="muted">Reads ${p.reads.length} · saves ${p.saves.length} · feeds ${p.feeds.length} page${p.feeds.length === 1 ? "" : "s"}</div>
+    <div class="fm-h-tip">🔍 Press the magnifier to break it down step by step. Drag the top bar to move it.</div>`;
+  card.style.display = "block";
+  const r = el.getBoundingClientRect(), c = card.getBoundingClientRect();
+  let left = r.right + 10;
+  if (left + c.width > innerWidth - 8) left = r.left - c.width - 10;
+  if (left < 8) left = Math.min(Math.max(8, r.left), innerWidth - c.width - 8);
+  const top = Math.min(Math.max(8, r.top), innerHeight - c.height - 8);
+  card.style.left = left + "px"; card.style.top = top + "px";
+}
+
+function hideHover() { const c = $("#fmHover"); if (c) c.style.display = "none"; }
+
+// trail: [{page}] , then {action: index} or {fn: key} steps deeper
+function openDrill(trail) {
+  hideTip(); hideHover();
+  FM.drill = trail;
+  const p = fmPage(trail[0].page), last = trail[trail.length - 1];
+  const crumbs = trail.map((t, i) => {
+    let label = t.page ? `${p.icon} ${p.label}` : t.action !== undefined ? actionTitle(p.endpoints[t.action]) : fmHuman(fmFn(t.fn)?.name || t.fn);
+    if (label.length > 48) label = label.slice(0, 45).replace(/\s+\S*$/, "") + "…";
+    return i === trail.length - 1 ? `<b>${esc(label)}</b>` : `<a href="#" onclick="openDrill(FM.drill.slice(0, ${i + 1}));return false">${esc(label)}</a>`;
+  }).join(" › ");
+  let body;
+  if (last.page) {
+    body = `<p>${esc(p.about || "")}</p>
+      <p class="muted">Each card is one thing this page does. The chips are the steps behind it. Click a step to break it down again.</p>
+      <div class="fm-drill-grid">${p.endpoints.map((e, i) => `<div class="fm-dcard">
+        <div class="fm-dwhen">${esc(actionWhen(e))}</div>
+        <h4>${esc(actionTitle(e))}</h4>
+        <div class="fm-dsteps">${e.steps.map(k => stepChip(k)).join("") || `<span class="muted">Handled right in the server.</span>`}</div>
+        <div class="fm-where">${esc(e.method)} ${esc(e.path)} · ${esc(e.server)}</div>
+        ${e.steps.length ? `<button class="btn small ghost" onclick="openDrill([...FM.drill, {action: ${i}}])">🔍 Break it down</button>` : ""}</div>`).join("")
+        || `<p class="muted">This page only shows information. It doesn't ask the server for anything.</p>`}</div>`;
+  } else {
+    const keys = last.action !== undefined ? p.endpoints[last.action].steps : fmFn(last.fn)?.calls || [];
+    const head = last.fn ? fnCard(last.fn, true) : `<p class="muted">${esc(actionWhen(p.endpoints[last.action]))}, these steps run:</p>`;
+    body = `${head}${keys.length ? `<h3 class="section-title">${last.fn ? "It uses these steps" : "Steps"}</h3>
+      <div class="fm-drill-grid">${keys.map(k => fnCard(k)).join("")}</div>` : `<p class="muted">This is the smallest step. It doesn't use any other steps.</p>`}`;
+  }
+  $("#fmModal").innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">🔍 Break it down</h2>
+      <div class="row">${trail.length > 1 ? `<button class="btn ghost small" onclick="openDrill(FM.drill.slice(0, -1))">⬅ Back</button>` : ""}
+      <button class="btn ghost small" onclick="closeFlowEditor()">✖ Close</button></div></div>
+    <div class="fm-crumbs">${crumbs}</div>${body}`;
+  FM.draft = null;
+  $("#fmOverlay").classList.add("on");
+}
+
+function stepChip(k) {
+  return `<a href="#" class="fm-chip" onclick="openDrill([...FM.drill, {fn: '${k}'}]);return false">${esc(fmHuman(fmFn(k)?.name || k))}</a>`;
+}
+
+function fnCard(k, big = false) {
+  const f = fmFn(k);
+  if (!f) return "";
+  const chips = (list, cls = "") => list.map(r => `<span class="fm-chip ${cls}">${esc(fmRes(r))}</span>`).join("");
+  return `<div class="fm-dcard${big ? " big" : ""}">
+    <h4>${esc(fmHuman(f.name))}</h4><p>${esc(fnSummary(k))}</p>
+    ${f.reads.length ? `<div class="fm-row">📖 <b>Reads:</b> ${chips(f.reads)}</div>` : ""}
+    ${f.saves.length ? `<div class="fm-row">💾 <b>Saves:</b> ${chips(f.saves, "w")}</div>` : ""}
+    ${f.outside.length ? `<div class="fm-row">🌐 <b>Outside:</b> ${f.outside.map(esc).join(", ")}</div>` : ""}
+    <div class="fm-where">${esc(f.file)}:${f.line}${f.calls.length ? ` · uses ${f.calls.length} step${f.calls.length === 1 ? "" : "s"}` : ""}</div>
+    ${!big && f.calls.length ? `<button class="btn small ghost" onclick="openDrill([...FM.drill, {fn: '${k}'}])">🔍 Break it down</button>`
+      : !big ? `<button class="btn small ghost" onclick="openDrill([...FM.drill, {fn: '${k}'}])">Details</button>` : ""}</div>`;
+}

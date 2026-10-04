@@ -79,6 +79,7 @@ class PyFunc:
         self.module, self.name, self.node, self.src = module, name, node, src
         self.reads, self.writes, self.calls = set(), set(), set()
         self.outside, self.schedules = [], []
+        self.doc = (ast.get_docstring(node) or "").strip()
 
     @property
     def key(self):
@@ -468,14 +469,14 @@ def scan_screen(html_path):
             with open(p, encoding="utf-8") as f:
                 scripts.append(f.read())
             js_files.append(src)
-    nav = re.findall(r"<button data-page=\"(\w+)\"[^>]*>([^<]+)", html)
+    nav = re.findall(r"<button data-page=\"(\w+)\"(?:[^>]*?data-tip=\"([^\"]*)\")?[^>]*>([^<]+)", html)
     pages = []
-    for pid, label in nav:
+    for pid, about, label in nav:
         m = re.search(r"<section class=\"page[^\"]*\" id=\"page-%s\">([\s\S]*?)</section>" % pid, html)
         body = m.group(1) if m else ""
         label = label.strip()
         icon = label.split(" ", 1)[0] if label and not label[0].isalnum() else ""
-        pages.append({"id": pid, "label": label[len(icon):].strip() if icon else label, "icon": icon,
+        pages.append({"id": pid, "label": label[len(icon):].strip() if icon else label, "icon": icon, "about": about,
                       "html": body, "ids": set(re.findall(r"\bid=\"([\w-]+)\"", body))})
 
     chunks = []
@@ -541,6 +542,50 @@ def scan_screen(html_path):
 
 # =====================================================================  put it together
 
+NOISE = {"send_json", "read_json", "send_response", "send_header", "end_headers", "now_iso"}
+
+
+def _branch_keys(funcs, fn, path):
+    """In a function that answers several addresses (if path == "/api/x": ...), the functions behind just this one."""
+    for st in ast.walk(fn.node):
+        if isinstance(st, ast.If):
+            m = _route_test(st.test, {})
+            if m and m[0] == "eq" and path in m[1]:
+                keys = set()
+                for n in ast.walk(ast.Module(body=st.body, type_ignores=[])):
+                    ref = f"{n.value.id}.{n.attr}" if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) \
+                        else n.id if isinstance(n, ast.Name) else None
+                    for cand in (ref and f"{fn.module}.{ref}", ref):
+                        if cand in funcs:
+                            keys.add(cand)
+                return keys
+    return None
+
+
+def _steps(funcs, keys, path):
+    out = []
+    for k in keys:
+        narrowed = _branch_keys(funcs, funcs[k], path)
+        out += sorted(narrowed) if narrowed is not None else [k]
+    return [k for k in dict.fromkeys(out) if funcs[k].name not in NOISE]
+
+
+def _catalog(funcs, start):
+    """Every function a page uses, with what it does in plain words, so the map can be broken down step by step."""
+    keys = set()
+    for k in start:
+        keys |= _closure(funcs, k)
+    out = {}
+    for k in sorted(keys):
+        fn = funcs[k]
+        out[k] = {"name": fn.name, "file": f"{fn.module}.py", "line": fn.node.lineno,
+                  "doc": fn.doc.split("\n\n")[0].replace("\n", " ")[:400],
+                  "reads": sorted(fn.reads), "saves": sorted(fn.writes),
+                  "outside": sorted({o["name"] for o in fn.outside}),
+                  "calls": sorted(c for c in fn.calls if c in funcs and funcs[c].name not in NOISE)}
+    return out
+
+
 def scan():
     py_paths = sorted(os.path.join(HERE, f) for f in os.listdir(HERE)
                       if f.endswith(".py") and f not in SKIP_PY and not f.startswith("test"))
@@ -567,7 +612,8 @@ def scan():
             if not r:
                 warnings.append(f"{p['label']}: the screen asks for {meth} {path} but the server has no such address")
                 continue
-            endpoints.append({"method": meth, "path": path, "server": f"app.py:{r['line']}"})
+            endpoints.append({"method": meth, "path": path, "server": f"app.py:{r['line']}",
+                              "steps": _steps(funcs, r["funcs"], path)})
             for f in r["funcs"]:
                 keys |= _closure(funcs, f)
             direct_outside += r["outside"]
@@ -578,7 +624,7 @@ def scan():
         sched = [s for s in schedules if s["func"] in keys and any(re.search(r"\.%s\b" % re.escape(n), p["text"]) for n in s["fields"])]
         sched += p.get("js_schedules", [])
         out_pages.append({
-            "id": p["id"], "label": p["label"], "icon": p["icon"],
+            "id": p["id"], "label": p["label"], "icon": p["icon"], "about": p["about"],
             "reads": sorted(reads), "saves": sorted(writes), "endpoints": endpoints,
             "schedules": _dedupe(sched, ("label", "when")), "outside": _dedupe(outside, ("name",)),
         })
@@ -594,8 +640,12 @@ def scan():
     reads, writes, outside = gather(main_keys)
     reads -= {"table:settings"}
     writes -= {"table:settings"}
+    bg_actions = [{"method": "RUN", "path": "start-up", "server": funcs[k].where(funcs[k].node), "steps": [k]}
+                  for k, fn in funcs.items() if fn.name == "main"]
+    bg_actions += [{"method": "RUN", "path": s["label"], "server": s["where"], "steps": [s["func"]]} for s in bg]
     out_pages.append({"id": "server", "label": "Behind the scenes", "icon": "🖥", "reads": sorted(reads),
-                      "saves": sorted(writes), "endpoints": [], "schedules": _dedupe(bg, ("label",)),
+                      "about": "The app itself running: starting up, and the jobs it does on a timer without anyone clicking.",
+                      "saves": sorted(writes), "endpoints": bg_actions, "schedules": _dedupe(bg, ("label",)),
                       "outside": _dedupe(outside, ("name",)), "background": True})
 
     # page A feeds page B when A saves something B reads
@@ -612,7 +662,9 @@ def scan():
     for p in out_pages:
         p["feeds"] = sorted({e["b"] if e["a"] == p["id"] else e["a"] for e in edges.values()
                              if (e["a"] == p["id"] and e["a_to_b"]) or (e["b"] == p["id"] and e["b_to_a"])})
-    resources = sorted({r for p in out_pages for r in p["reads"] + p["saves"]})
+    functions = _catalog(funcs, {k for p in out_pages for e in p["endpoints"] for k in e["steps"]})
+    resources = sorted({r for p in out_pages for r in p["reads"] + p["saves"]}
+                       | {r for f in functions.values() for r in f["reads"] + f["saves"]})
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "files": [os.path.basename(p) for p in py_paths] + ["index.html"] + js_files,
@@ -621,6 +673,7 @@ def scan():
         "resources": {r: label_of(r) for r in resources},
         "routes": len(routes),
         "warnings": warnings,
+        "functions": functions,
     }
 
 

@@ -46,6 +46,39 @@ class ScanTest(unittest.TestCase):
         self.assertTrue(all(o["kind"] == "mentioned" for o in p["howto"]["outside"]))
 
 
+class BreakDownTest(unittest.TestCase):
+    """What the hover details and the 🔍 Break it down button are built from."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.map = flowmap.scan()
+        cls.pages = {p["id"]: p for p in cls.map["pages"]}
+
+    def test_every_page_says_what_it_does(self):
+        for p in self.map["pages"]:
+            self.assertTrue(p["about"], p["id"])
+
+    def test_actions_point_at_the_exact_steps(self):
+        add = {e["path"]: e for e in self.pages["add"]["endpoints"]}
+        self.assertEqual(add["/api/leads"]["steps"], ["app.add_lead"])
+        # one function answers every Flow Map address, so each address is narrowed to its own branch
+        fm = {(e["method"], e["path"]): e for e in self.pages["flowmap"]["endpoints"]}
+        self.assertEqual(fm[("POST", "/api/flowmap/hardstop")]["steps"], ["bots.set_hard_stop"])
+
+    def test_every_step_can_be_broken_down_again(self):
+        fns = self.map["functions"]
+        for p in self.map["pages"]:
+            for e in p["endpoints"]:
+                for k in e["steps"]:
+                    self.assertIn(k, fns)
+        self.assertIn("app.parse_lead", fns["app.add_lead"]["calls"])
+        self.assertIn("table:leads", fns["app.get_lead"]["reads"])
+        self.assertTrue(fns["app.add_lead"]["doc"])
+        for f in fns.values():
+            for c in f["calls"]:
+                self.assertIn(c, fns)
+
+
 class BotSafetyTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
